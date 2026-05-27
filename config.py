@@ -1,12 +1,12 @@
 GROUP_URLS: list[str] = [
     # Add your Facebook group URLs here, e.g.:
-    # "https://www.facebook.com/groups/123456789/?sorting_setting=CHRONOLOGICAL",
-    "https://www.facebook.com/groups/3668775323228109/?sorting_setting=CHRONOLOGICAL",
-    "https://www.facebook.com/groups/1207463126375923/?sorting_setting=CHRONOLOGICAL",
-    "https://www.facebook.com/groups/573045118309642/?sorting_setting=CHRONOLOGICAL",
-    "https://www.facebook.com/groups/2050201058584087/?sorting_setting=CHRONOLOGICAL",
-    "https://www.facebook.com/groups/williamsburggreenpointhousing/?sorting_setting=CHRONOLOGICAL",
-    "https://www.facebook.com/groups/217717306455238/?sorting_setting=CHRONOLOGICAL",
+    # "https://www.facebook.com/groups/123456789",
+    "https://www.facebook.com/groups/1207463126375923",
+    "https://www.facebook.com/groups/3668775323228109",
+    "https://www.facebook.com/groups/573045118309642",
+    "https://www.facebook.com/groups/2050201058584087",
+    "https://www.facebook.com/groups/williamsburggreenpointhousing",
+    "https://www.facebook.com/groups/217717306455238",
 ]
 
 # Keyword sets — a post must match at least one term from EACH active group to qualify.
@@ -64,13 +64,14 @@ EXCLUDE_KEYWORDS: list[str] = [
     "1 bed/1 bath",
     "1 bed/ 1 bath",
     "1 bd/1ba",
-    "1bd / 1ba"
+    "1bd / 1ba",
+    "1 bed 1 bath",
     "one bed/one bath",
     "one bed/ one bath",
 ]
 
 # How many posts to scrape per group per run
-MAX_POSTS_PER_GROUP: int = 50
+MAX_POSTS_PER_GROUP: int = 200
 
 # Browser session storage path (keeps you logged in between runs)
 SESSION_PATH: str = "session"

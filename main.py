@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 from rich import box
 
 from config import GROUP_URLS
@@ -39,7 +40,7 @@ async def main() -> None:
     console.print(f"\n[bold]Scanned {len(posts)} posts — [green]{len(matches)} match(es)[/green] found.[/bold]\n")
 
     if not matches:
-        console.print("[yellow]No posts matched all criteria (August move-in, private bath, Brooklyn, no studios/short-term).[/yellow]")
+        console.print("[yellow]No posts matched your criteria :([/yellow]")
         console.print("Tip: check that your group URLs are correct and you're logged in.")
         return
 
@@ -48,23 +49,22 @@ async def main() -> None:
         by_group[post.source_group].append(post)
 
     for group_url, group_posts in by_group.items():
-        label = _group_label(group_url)
         count = len(group_posts)
-        console.print(f"[bold cyan]{label}[/bold cyan]  [dim]({count} match{'es' if count != 1 else ''})[/dim]")
         console.print(f"[dim]{group_url}[/dim]")
 
         table = Table(box=box.SIMPLE_HEAD, show_header=True, header_style="bold", padding=(0, 1))
         table.add_column("Move-in", style="green", min_width=14)
         table.add_column("Neighborhood", min_width=18)
         table.add_column("Beds / Baths", min_width=14)
-        table.add_column("Link", style="blue underline")
+        table.add_column("Link")
 
         for post in group_posts:
+            link = Text("View post →", style=f"blue underline link {post.url}") 
             table.add_row(
                 post.move_in_date or "—",
                 post.neighborhood or "—",
                 post.beds_baths or "—",
-                post.url,
+                link,
             )
 
         console.print(table)

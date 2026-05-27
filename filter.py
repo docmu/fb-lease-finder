@@ -3,12 +3,12 @@ from dataclasses import dataclass, field
 from config import BATHROOM_KEYWORDS, LOCATION_KEYWORDS, EXCLUDE_KEYWORDS
 
 
-# Broad August match used for the must-match check
-_AUGUST_RE = re.compile(r'\baug(?:ust)?\.?\b|8/\d{1,2}', re.IGNORECASE)
+# Broad move-in month match used for the must-match check
+_MOVE_IN_MONTH_RE = re.compile(r'\bjul(?:y)?\.?\b|7/\d{1,2}', re.IGNORECASE)
 
-# Specific date extraction: "Aug 1", "August 15th", "8/1", etc.
+# Specific date extraction: "Jul 1", "July 15th", "7/1", etc.
 _DATE_EXTRACT_RE = re.compile(
-    r'8/\d{1,2}|aug(?:ust)?\.?\s*\d{1,2}(?:st|nd|rd|th)?',
+    r'7/\d{1,2}|jul(?:y)?\.?\s*\d{1,2}(?:st|nd|rd|th)?',
     re.IGNORECASE,
 )
 
@@ -16,16 +16,22 @@ _NUM = r'(?:\d+|one|two|three)'
 _BEDS_RE = re.compile(rf'({_NUM})\s*(?:bed(?:room)?s?|bdrm|br|bd)\b', re.IGNORECASE)
 _BATHS_RE = re.compile(rf'({_NUM})\s*(?:bath(?:room)?s?|ba|bth|br)\b', re.IGNORECASE)
 
-# Detects short-term sublet date ranges involving August:
-#   cross-month: "June - August", "June 1 - August 1", "June to August"
-#   within-August: "August 2-5", "Aug 1 - 15"
-_RANGE_TO_AUG_RE = re.compile(
-    r'(?:'
-    r'\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?)'
-    r'.{1,50}?(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)\s*\baug(?:ust)?\b'
-    r'|'
-    r'\baug(?:ust)?\.?\s*\d{1,2}\s*[-–—]\s*(?:\baug(?:ust)?\.?\s*)?\d{1,2}\b'
-    r')',
+# Detects short-term sublet date ranges involving move in month:
+#   ending in July:    "June - July", "June 1 - July 1", "June to July"
+#   starting in July:  "July - September", "July to August"
+#   within July:       "July 2-5", "Jul 1st - 31st", "July 1st-July 31st"
+_MONTHS = r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
+_SEP = r'(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)'
+_ORD = r'(?:st|nd|rd|th)?'
+_SHORT_TERM_SUBLET_RANGE_RE = re.compile(
+    rf'(?:'
+    rf'\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?)'
+    rf'.{{1,50}}?{_SEP}\s*\bjul(?:y)?\b'
+    rf'|'
+    rf'\bjul(?:y)?\b.{{0,20}}?{_SEP}\s*\b{_MONTHS}\b'
+    rf'|'
+    rf'\bjul(?:y)?\.?\s*\d{{1,2}}{_ORD}\s*[-–—]\s*(?:\bjul(?:y)?\.?\s*)?\d{{1,2}}{_ORD}\b'
+    rf')',
     re.IGNORECASE,
 )
 _TAKEOVER_RE = re.compile(r'\b(?:(?:lease\s+)?takeover(?:\s+lease)?|re[-\s]?sign)\b', re.IGNORECASE)
@@ -52,7 +58,11 @@ def _any_match(text: str, keywords: list[str]) -> list[str]:
 
 def _extract_move_in_date(text: str) -> str:
     m = _DATE_EXTRACT_RE.search(text)
-    return m.group(0).strip() if m else ""
+    if m:
+        return m.group(0).strip()
+    # Fall back to just the month name if no specific date found
+    m2 = _MOVE_IN_MONTH_RE.search(text)
+    return m2.group(0).strip() if m2 else ""
 
 
 def _extract_neighborhood(location_hits: list[str]) -> str:
@@ -80,10 +90,10 @@ def evaluate(post: Post) -> bool:
         return False
 
     # Drop short-term sublets (e.g. June - August) unless it's a lease takeover/re-sign
-    if _RANGE_TO_AUG_RE.search(post.text) and not _TAKEOVER_RE.search(post.text):
+    if _SHORT_TERM_SUBLET_RANGE_RE.search(post.text) and not _TAKEOVER_RE.search(post.text):
         return False
 
-    move_in_hits = _AUGUST_RE.findall(post.text)
+    move_in_hits = _MOVE_IN_MONTH_RE.findall(post.text)
     bathroom_hits = _any_match(post.text, BATHROOM_KEYWORDS)
     location_hits = _any_match(post.text, LOCATION_KEYWORDS)
 
