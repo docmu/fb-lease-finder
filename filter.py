@@ -198,15 +198,25 @@ def evaluate(post: Post) -> bool:
         return False
 
     move_in_hits = _MOVE_IN_MONTH_RE.findall(post.text)
-    bathroom_hits = _any_match(post.text, PRIVATE_BATHROOM_KEYWORDS) if _REQUIRE_PRIVATE_BATHROOM else []
     location_hits = _any_match(post.text, _ACTIVE_LOCATION_KEYWORDS)
-
-    post.matched_terms = move_in_hits + bathroom_hits + location_hits
+    bathroom_hits = _any_match(post.text, PRIVATE_BATHROOM_KEYWORDS) if _REQUIRE_PRIVATE_BATHROOM else []
 
     if not move_in_hits or not location_hits:
         return False
+
     if _REQUIRE_PRIVATE_BATHROOM and not bathroom_hits:
-        return False
+        # Fall back: assume the room has a private bathroom if total bathrooms >= total bedrooms
+        beds_m = _BEDS_RE.search(post.text)
+        baths_m = _BATHS_RE.search(post.text)
+        if beds_m and baths_m:
+            bed_n = _WORD_TO_NUM.get(beds_m.group(1).lower(), beds_m.group(1))
+            bath_n = _WORD_TO_NUM.get(baths_m.group(1).lower(), baths_m.group(1))
+            if not bed_n.isdigit() or not bath_n.isdigit() or int(bath_n) < int(bed_n):
+                return False
+        else:
+            return False
+
+    post.matched_terms = move_in_hits + bathroom_hits + location_hits
 
     post.move_in_date = _extract_move_in_date(post.text)
     post.neighborhood = _extract_neighborhood(location_hits)

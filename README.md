@@ -19,7 +19,7 @@ If you don't have it, download it from [python.org](https://www.python.org/downl
 ## First-time setup
 
 1. open your terminal  
-2. navigate to this folder (e.g., cd Downloads/fb-sublease-finder/)
+2. navigate to this folder (e.g. `cd Downloads/fb-sublease-finder/`)
 3. run these commands in order: 
 
 ```bash
@@ -54,7 +54,7 @@ A browser window may open and prompt you to log in to Facebook for authenticatio
 
 **Step 3 — See your results**
 
-The script returns matching posts from the LAST 24 HOURS. **Command+Click** View post to open the link in the browser.
+The script returns matching posts from the LAST 24 HOURS. **Command+Click** "View post" to open the link in the browser.
 
 ---
 
