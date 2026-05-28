@@ -1,0 +1,59 @@
+# fb-sublease-finder
+
+Searches Facebook NYC sublease groups and shows you posts that match your criteria bc finding an apartment is hard.
+
+---
+
+## Prerequisites
+
+You'll need **Python 3.9 or higher** installed. To check, open your terminal and run:
+
+```bash
+python3 --version
+```
+
+If you don't have it, download it from [python.org](https://www.python.org/downloads/).
+
+---
+
+## First-time setup
+
+Open your terminal, navigate to this folder, and run these commands in order:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/playwright install chromium
+```
+
+You only need to do this once.
+
+---
+
+## How to run the program
+
+```bash
+.venv/bin/python3 main.py
+```
+
+---
+
+## What to expect
+
+**Step 1 — You will be prompted to answer a few questions**
+
+For each question, use the **arrow keys** to move, **Space** to select, and press **Enter** to submit.
+
+For the URL question, paste one link at a time and press **Enter**. Press **Enter** on a blank line when you're done adding URLs.
+
+**Step 2 — Log in to Facebook**
+
+A browser window may open and prompt you to log in to Facebook for authentication purposes. The script will continue automatically once you're logged in. Your session is saved, so you usually only need to do this once.
+
+**Step 3 — See your results**
+
+The script returns matching posts from the LAST 24 HOURS. Ctrl+Click to open a link to a post in the browser.
+
+---
+
+Press **Ctrl+C** at any time to quit.
