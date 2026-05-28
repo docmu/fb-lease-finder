@@ -36,8 +36,8 @@ def _group_label(url: str) -> str:
     return parts[1] if len(parts) >= 2 else url
 
 
-async def main(selected_months: list[str]) -> None:
-    console.print(f"\n[bold]Scanning {len(GROUP_URLS)} group(s) for {', '.join(selected_months)} move-ins…[/bold]\n")
+async def main() -> None:
+    console.print(f"\n[bold]scanning {len(GROUP_URLS)} group(s). this might take a moment, hang tight…[/bold]\n")
     posts = await fetch_posts(GROUP_URLS)
     matches = [p for p in posts if evaluate(p)]
 
@@ -75,62 +75,70 @@ async def main(selected_months: list[str]) -> None:
         console.print()
 
 
+def _prompt() -> None:
+    """Run all questionary prompts and configure filters. Returns selected months."""
+    _INST = "(use arrow keys to move, space to select, and enter to submit)"
+
+    selected_months = questionary.checkbox(
+        "what’s your preferred move-in month(s)?",
+        choices=MONTH_NAMES,
+        instruction=_INST,
+    ).unsafe_ask()
+
+    if not selected_months:
+        console.print("[yellow]no months selected, exiting.[/yellow]")
+        sys.exit(0)
+
+    configure_move_in_months(selected_months)
+
+    selected_beds = questionary.checkbox(
+        "number of bedrooms?",
+        choices=BED_CHOICES,
+        instruction=_INST,
+    ).unsafe_ask()
+    configure_bedroom_filter(selected_beds or [])
+
+    require_bathroom = questionary.confirm(
+        "private bathroom?",
+        default=False,
+    ).unsafe_ask()
+    configure_bathroom_filter(bool(require_bathroom))
+
+    selected_boroughs = questionary.checkbox(
+        "which borough(s)?",
+        choices=BOROUGH_CHOICES,
+        instruction=_INST,
+    ).unsafe_ask()
+
+    selected_neighborhoods: list[str] = []
+    if questionary.confirm("do you have specific neighborhood(s) in mind?", default=False).unsafe_ask():
+        active_boroughs = selected_boroughs or BOROUGH_CHOICES
+        neighborhood_choices: list = []
+        for borough in active_boroughs:
+            names = list(BOROUGH_NEIGHBORHOODS.get(borough, {}).keys())
+            if names:
+                neighborhood_choices.append(questionary.Separator(f"\n── {borough} ──"))
+                neighborhood_choices.extend(names)
+        selected_neighborhoods = questionary.checkbox(
+            "select neighborhoods:",
+            choices=neighborhood_choices,
+            instruction=_INST,
+        ).unsafe_ask() or []
+
+    configure_borough_filter(selected_boroughs or [], selected_neighborhoods)
+
+
 if __name__ == "__main__":
-    """runs synchronously before asyncio.run() starts and the results are passed into main()"""
     if not GROUP_URLS:
         console.print("[red]No group URLs configured.[/red] Add them to [bold]config.py[/bold] → GROUP_URLS.")
         sys.exit(1)
 
-    selected = questionary.checkbox(
-        "Select your preferred move-in month(s):",
-        choices=MONTH_NAMES,
-        instruction="(use arrow keys to move, space to select, and enter to submit)"
-    ).ask()
+    console.print("[green]hiii there i’m here to help you find your next nyc apartment! i just have a few questions before i get started :D[/green]\n")
 
-    if not selected:
-        console.print("[yellow]No months selected, exiting.[/yellow]")
+    try:
+        """_prompt() runs synchronously before asyncio.run() starts in order to not conflict with the event loop"""
+        _prompt()
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        console.print("\n[red]program aborted bye![/red]")
         sys.exit(0)
-
-    configure_move_in_months(selected)
-
-    selected_beds = questionary.checkbox(
-        "Number of bedrooms?",
-        choices=BED_CHOICES,
-        instruction="(use arrow keys to move, space to select, and enter to submit)"
-    ).ask()
-
-    configure_bedroom_filter(selected_beds or [])
-
-    require_bathroom = questionary.confirm(
-        "Private bathroom?",
-        default=False,
-    ).ask()
-    configure_bathroom_filter(bool(require_bathroom))
-
-    selected_boroughs = questionary.checkbox(
-        "Which borough(s)?",
-        choices=BOROUGH_CHOICES,
-        instruction="(use arrow keys to move, space to select, and enter to submit)"
-    ).ask()
-
-    selected_neighborhoods: list[str] = []
-    want_specific = questionary.confirm(
-        "Do you have specific neighborhoods in mind?",
-        default=False,
-    ).ask()
-    if want_specific:
-        active_boroughs = selected_boroughs or BOROUGH_CHOICES
-        neighborhood_choices = []
-        for borough in active_boroughs:
-            names = list(BOROUGH_NEIGHBORHOODS.get(borough, {}).keys())
-            if names:
-                neighborhood_choices.append(questionary.Separator(f"\n── {borough} ──\n"))
-                neighborhood_choices.extend(names)
-        selected_neighborhoods = questionary.checkbox(
-            "Select neighborhoods:",
-            choices=neighborhood_choices,
-            instruction="(use arrow keys to move, space to select, and enter to submit)"
-        ).ask() or []
-
-    configure_borough_filter(selected_boroughs or [], selected_neighborhoods or [])
-    asyncio.run(main(selected))
