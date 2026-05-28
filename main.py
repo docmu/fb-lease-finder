@@ -16,7 +16,7 @@ from rich import box
 
 import questionary
 
-from config import GROUP_URLS, BOROUGH_NEIGHBORHOODS
+from config import BOROUGH_NEIGHBORHOODS
 from scraper import fetch_posts
 from filter import (
     Post, evaluate,
@@ -36,9 +36,9 @@ def _group_label(url: str) -> str:
     return parts[1] if len(parts) >= 2 else url
 
 
-async def main() -> None:
-    console.print(f"\n[bold]scanning {len(GROUP_URLS)} group(s). this might take a moment, hang tight…[/bold]\n")
-    posts = await fetch_posts(GROUP_URLS)
+async def main(group_urls: list[str]) -> None:
+    console.print(f"\n[bold]scanning {len(group_urls)} group(s). this might take a moment, hang tight…[/bold]\n")
+    posts = await fetch_posts(group_urls)
     matches = [p for p in posts if evaluate(p)]
 
     console.print(f"\n[bold]Scanned {len(posts)} posts — [green]{len(matches)} match(es)[/green] found.[/bold]\n")
@@ -75,8 +75,8 @@ async def main() -> None:
         console.print()
 
 
-def _prompt() -> None:
-    """Run all questionary prompts and configure filters. Returns selected months."""
+def _prompt() -> list[str]:
+    """Run all questionary prompts and configure filters. Returns group URLs to search."""
     _INST = "(use arrow keys to move, space to select, and enter to submit)"
 
     selected_months = questionary.checkbox(
@@ -127,18 +127,30 @@ def _prompt() -> None:
 
     configure_borough_filter(selected_boroughs or [], selected_neighborhoods)
 
+    console.print("paste the fb group URL that you want me to search (e.g. https://www.facebook.com/groups/1207463126375923)\n")
+    group_urls: list[str] = []
+    while True:
+        url = questionary.text(
+            f"  url {len(group_urls) + 1}:" if group_urls else "  url 1:",
+            instruction="(press enter with no input when done)",
+        ).unsafe_ask()
+        url = (url or "").strip()
+        if not url:
+            if not group_urls:
+                console.print("[yellow]no urls entered, exiting.[/yellow]")
+                sys.exit(0)
+            break
+        group_urls.append(url)
+
+    return group_urls
+
 
 if __name__ == "__main__":
-    if not GROUP_URLS:
-        console.print("[red]No group URLs configured.[/red] Add them to [bold]config.py[/bold] → GROUP_URLS.")
-        sys.exit(1)
-
     console.print("[green]hiii there i’m here to help you find your next nyc apartment! i just have a few questions before i get started :D[/green]\n")
 
     try:
-        """_prompt() runs synchronously before asyncio.run() starts in order to not conflict with the event loop"""
-        _prompt()
-        asyncio.run(main())
+        group_urls = _prompt()
+        asyncio.run(main(group_urls))
     except KeyboardInterrupt:
         console.print("\n[red]program aborted bye![/red]")
         sys.exit(0)
