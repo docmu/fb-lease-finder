@@ -18,7 +18,9 @@ If you don't have it, download it from [python.org](https://www.python.org/downl
 
 ## First-time setup
 
-Open your terminal, navigate to this folder, and run these commands in order:
+1. open your terminal  
+2. navigate to this folder (e.g., cd Downloads)
+3. run these commands in order: 
 
 ```bash
 python3 -m venv .venv
@@ -52,7 +54,7 @@ A browser window may open and prompt you to log in to Facebook for authenticatio
 
 **Step 3 — See your results**
 
-The script returns matching posts from the LAST 24 HOURS. Ctrl+Click to open a link to a post in the browser.
+The script returns matching posts from the LAST 24 HOURS. **Ctrl+Click** View post to open the link in the browser.
 
 ---
 
