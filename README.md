@@ -19,7 +19,7 @@ If you don't have it, download it from [python.org](https://www.python.org/downl
 ## First-time setup
 
 1. open your terminal  
-2. navigate to this folder (e.g., cd Downloads)
+2. navigate to this folder (e.g., cd Downloads/fb-sublease-finder/)
 3. run these commands in order: 
 
 ```bash
