@@ -1,6 +1,3 @@
-# Keyword sets — a post must match at least one term from EACH active group to qualify.
-# Set a group to None to disable that filter.
-
 PRIVATE_BATHROOM_KEYWORDS: list[str] = [
     "private bath",
     "private bathroom",
@@ -10,6 +7,9 @@ PRIVATE_BATHROOM_KEYWORDS: list[str] = [
     "ensuite",
     "en-suite",
     "private restroom",
+    "attached bathroom",
+    "bathroom in the room",
+    "dedicated bathroom",
 ]
 
 BOROUGH_NEIGHBORHOODS: dict[str, dict[str, list[str]]] = {
@@ -35,11 +35,11 @@ BOROUGH_NEIGHBORHOODS: dict[str, dict[str, list[str]]] = {
         "Red Hook":          ["red hook", "redhook"],
     },
     "Manhattan": {
-        "Upper East Side":    ["upper east side", " ues "],
-        "Upper West Side":    ["upper west side", " uws "],
-        "Lower East Side":    ["lower east side", " les "],
-        "East Village":       ["east village"],
-        "West Village":       ["west village"],
+        "Upper East Side":    ["upper east side", "ues"],
+        "Upper West Side":    ["upper west side", "uws"],
+        "Lower East Side":    ["lower east side", "les"],
+        "East Village":       ["east village", "ev"],
+        "West Village":       ["west village", "wv"],
         "Chelsea":            ["chelsea"],
         "Hell's Kitchen":     ["hell's kitchen", "hells kitchen"],
         "Midtown":            ["midtown"],
@@ -63,7 +63,7 @@ BOROUGH_NEIGHBORHOODS: dict[str, dict[str, list[str]]] = {
     },
     "Queens": {
         "Astoria":         ["astoria"],
-        "Long Island City":["long island city", " lic "],
+        "Long Island City":["long island city", "lic"],
         "Sunnyside":       ["sunnyside"],
         "Woodside":        ["woodside"],
         "Jackson Heights": ["jackson heights"],
@@ -96,7 +96,7 @@ BOROUGH_NEIGHBORHOODS: dict[str, dict[str, list[str]]] = {
 # Derived from BOROUGH_NEIGHBORHOODS — each entry adds borough-level catch-alls
 # so posts that mention only "Brooklyn" still match when no specific neighborhoods are selected.
 BOROUGH_KEYWORDS: dict[str, list[str]] = {
-    "Brooklyn":     ["brooklyn", " bk ", "bklyn"] + [kw for kws in BOROUGH_NEIGHBORHOODS["Brooklyn"].values() for kw in kws],
+    "Brooklyn":     ["brooklyn", "bk", "bklyn"] + [kw for kws in BOROUGH_NEIGHBORHOODS["Brooklyn"].values() for kw in kws],
     "Manhattan":    ["manhattan"]                  + [kw for kws in BOROUGH_NEIGHBORHOODS["Manhattan"].values() for kw in kws],
     "Queens":       ["queens"]                     + [kw for kws in BOROUGH_NEIGHBORHOODS["Queens"].values() for kw in kws],
     "Bronx":        ["bronx"]                      + [kw for kws in BOROUGH_NEIGHBORHOODS["Bronx"].values() for kw in kws],
@@ -109,10 +109,27 @@ EXCLUDE_KEYWORDS: list[str] = [
     "short-term",
     "summer sublet",
     "entire month",
+    "per day",
+    "/day",
+    # explicitly no lease continuation — these contain "takeover"/"renew" but mean the opposite
+    "no option to renew",
+    "no option to take over",
+    "no option to takeover",
+    "no option to extend",
+    "not an option to renew",
+    "cannot be renewed",
+    "cannot renew",
+    "can't renew",
+    "no renewal option",
+    "no lease takeover",
+    "no lease renewal",
 ]
 
 # How many posts to scrape per group per run
 MAX_POSTS_PER_GROUP: int = 200
+
+# Cutoff time for posts to collect
+_SECONDS_24H: int = 86_400
 
 # Browser session storage path (keeps you logged in between runs)
 SESSION_PATH: str = "session"

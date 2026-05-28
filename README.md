@@ -54,7 +54,7 @@ A browser window may open and prompt you to log in to Facebook for authenticatio
 
 **Step 3 — See your results**
 
-The script returns matching posts from the LAST 24 HOURS. **Ctrl+Click** View post to open the link in the browser.
+The script returns matching posts from the LAST 24 HOURS. **Command+Click** View post to open the link in the browser.
 
 ---
 

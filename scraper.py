@@ -4,12 +4,11 @@ import time as _time
 from pathlib import Path
 from playwright.async_api import async_playwright, BrowserContext, Page
 
-from config import SESSION_PATH, MAX_POSTS_PER_GROUP
+from config import SESSION_PATH, MAX_POSTS_PER_GROUP, _SECONDS_24H
 from filter import Post
 
 
 SESSION_DIR = Path(SESSION_PATH)
-_SECONDS_24H: int = 86_400
 
 
 def _with_chronological_sort(url: str) -> str:
@@ -27,7 +26,7 @@ async def _ensure_logged_in(context: BrowserContext) -> None:
 
     try:
         await page.wait_for_selector('[aria-label="Home"]', timeout=5_000)
-        print("Already logged in.")
+        print("already logged in.")
         await page.close()
         return
     except Exception:
@@ -62,6 +61,14 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
             try:
                 # Extract post text
                 text_el = await article.query_selector('[data-ad-comet-preview="message"]')
+                # expand "See more" first if the post is truncated
+                see_more = await article.query_selector('[role="button"]:has-text("See more")')
+                if see_more:
+                    try:
+                        await see_more.click()
+                        await page.wait_for_timeout(300)
+                    except Exception:
+                        pass
                 if not text_el:
                     text = await article.inner_text()
                 else:
@@ -132,7 +139,7 @@ async def fetch_posts(group_urls: list[str]) -> list[Post]:
         page = await context.new_page()
 
         for url in group_urls:
-            print(f"Scraping: {_with_chronological_sort(url)}")
+            print(f"scraping: {url}")
             try:
                 group_posts = await _scrape_group(page, url)
                 print(f"  → {len(group_posts)} posts within the past 24 h")

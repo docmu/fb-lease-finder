@@ -5,9 +5,10 @@ from dataclasses import dataclass, field
 from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBORHOODS, EXCLUDE_KEYWORDS
 
 
-_SEP = r'(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)'
-_ORD = r'(?:st|nd|rd|th)?'
-_NUM = r'(?:\d+|one|two|three)'
+# Shared building blocks used inside dynamically compiled regexes below
+_SEP = r'(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)'  # date range separators: "–", "to", "through", "until"
+_ORD = r'(?:st|nd|rd|th)?'                          # optional ordinal suffix: "1st", "2nd", "3rd", "4th"
+_NUM = r'(?:\d+|one|two|three)'                     # digit or written-out number up to three
 
 # (abbreviated_pattern, numeric_string) for each month
 _MONTH_DATA: dict[str, tuple[str, str]] = {
@@ -32,10 +33,20 @@ _MOVE_IN_MONTH_RE: re.Pattern = re.compile(r'(?!)')
 _DATE_EXTRACT_RE: re.Pattern = re.compile(r'(?!)')
 _SHORT_TERM_SUBLET_RANGE_RE: re.Pattern = re.compile(r'(?!)')
 
+# Matches lease continuation mentions — these override the short-term sublet filter
+# e.g. "lease takeover", "take over the lease", "re-sign", "lease renewal", "renewing my lease"
 _TAKEOVER_RE = re.compile(
-    r'\b(?:(?:lease\s+)?takeover(?:\s+lease)?|re[-\s]?sign)\b',
+    r'\b(?:'
+    r'(?:lease\s+)?take[-\s]?over(?:\s+(?:the\s+)?lease)?'  # take over / lease takeover / take over the lease
+    r'|re[-\s]?sign'                                          # re-sign / resign
+    r'|lease\s+renew(?:al|ing)?'                             # lease renewal / lease renewing
+    r'|renew(?:al|ing)?\s+(?:the\s+|my\s+)?lease'           # renew lease / renewing my lease / renewal of the lease
+    r')\b',
     re.IGNORECASE,
 )
+
+# Captures the leading number/word from bedroom/bathroom counts
+# e.g. "2bed", "two bedrooms", "1 br", "3 bdrm"
 _BEDS_RE = re.compile(rf'({_NUM})\s*(?:bed(?:room)?s?|bdrm|br|bd)\b', re.IGNORECASE)
 _BATHS_RE = re.compile(rf'({_NUM})\s*(?:bath(?:room)?s?|ba|bth|br)\b', re.IGNORECASE)
 
@@ -136,7 +147,7 @@ class Post:
 
 def _any_match(text: str, keywords: list[str]) -> list[str]:
     lower = text.lower()
-    return [kw for kw in keywords if kw in lower]
+    return [kw for kw in keywords if re.search(r'\b' + re.escape(kw.strip()) + r'\b', lower)]
 
 
 def _extract_move_in_date(text: str) -> str:

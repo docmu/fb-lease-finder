@@ -37,15 +37,15 @@ def _group_label(url: str) -> str:
 
 
 async def main(group_urls: list[str]) -> None:
-    console.print(f"\n[bold]scanning {len(group_urls)} group(s). this might take a moment, hang tight…[/bold]\n")
+    console.print(f"\n[bold]scanning {len(group_urls)} group(s)... this might take a moment, hang tight![/bold]\n")
     posts = await fetch_posts(group_urls)
     matches = [p for p in posts if evaluate(p)]
 
-    console.print(f"\n[bold]Scanned {len(posts)} posts — [green]{len(matches)} match(es)[/green] found.[/bold]\n")
+    console.print(f"\n[bold]scanned {len(posts)} posts — [green]{len(matches)} match(es)[/green] found.[/bold]\n")
 
     if not matches:
-        console.print("[yellow]No posts matched your criteria :([/yellow]")
-        console.print("Tip: check that your group URLs are correct and you're logged in.")
+        console.print("[yellow]no posts matched your criteria :([/yellow]")
+        console.print("tip: check that your group URLs are correct and you're logged in.")
         return
 
     by_group: dict[str, list[Post]] = defaultdict(list)
@@ -146,7 +146,7 @@ def _prompt() -> list[str]:
 
 
 if __name__ == "__main__":
-    console.print("[green]hiii there i’m here to help you find your next nyc apartment! i just have a few questions before i get started :D[/green]\n")
+    console.print("[green]hiii i’m here to help you find your next nyc apartment! i just have a few questions before i get started :D[/green]\n")
 
     try:
         group_urls = _prompt()
