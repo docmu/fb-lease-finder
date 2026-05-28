@@ -1,40 +1,123 @@
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
-from config import BATHROOM_KEYWORDS, LOCATION_KEYWORDS, EXCLUDE_KEYWORDS
+from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBORHOODS, EXCLUDE_KEYWORDS
 
 
-# Broad move-in month match used for the must-match check
-_MOVE_IN_MONTH_RE = re.compile(r'\bjul(?:y)?\.?\b|7/\d{1,2}', re.IGNORECASE)
+_SEP = r'(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)'
+_ORD = r'(?:st|nd|rd|th)?'
+_NUM = r'(?:\d+|one|two|three)'
 
-# Specific date extraction: "Jul 1", "July 15th", "7/1", etc.
-_DATE_EXTRACT_RE = re.compile(
-    r'7/\d{1,2}|jul(?:y)?\.?\s*\d{1,2}(?:st|nd|rd|th)?',
+# (abbreviated_pattern, numeric_string) for each month
+_MONTH_DATA: dict[str, tuple[str, str]] = {
+    "January":   ("jan(?:uary)?",   "1"),
+    "February":  ("feb(?:ruary)?",  "2"),
+    "March":     ("mar(?:ch)?",     "3"),
+    "April":     ("apr(?:il)?",     "4"),
+    "May":       ("may",            "5"),
+    "June":      ("jun(?:e)?",      "6"),
+    "July":      ("jul(?:y)?",      "7"),
+    "August":    ("aug(?:ust)?",    "8"),
+    "September": ("sep(?:tember)?", "9"),
+    "October":   ("oct(?:ober)?",   "10"),
+    "November":  ("nov(?:ember)?",  "11"),
+    "December":  ("dec(?:ember)?",  "12"),
+}
+
+MONTH_NAMES: list[str] = list(_MONTH_DATA.keys())
+
+# Placeholders replaced by configure_move_in_months() before first use
+_MOVE_IN_MONTH_RE: re.Pattern = re.compile(r'(?!)')
+_DATE_EXTRACT_RE: re.Pattern = re.compile(r'(?!)')
+_SHORT_TERM_SUBLET_RANGE_RE: re.Pattern = re.compile(r'(?!)')
+
+_TAKEOVER_RE = re.compile(
+    r'\b(?:(?:lease\s+)?takeover(?:\s+lease)?|re[-\s]?sign)\b',
     re.IGNORECASE,
 )
-
-_NUM = r'(?:\d+|one|two|three)'
 _BEDS_RE = re.compile(rf'({_NUM})\s*(?:bed(?:room)?s?|bdrm|br|bd)\b', re.IGNORECASE)
 _BATHS_RE = re.compile(rf'({_NUM})\s*(?:bath(?:room)?s?|ba|bth|br)\b', re.IGNORECASE)
 
-# Detects short-term sublet date ranges involving move in month:
-#   ending in July:    "June - July", "June 1 - July 1", "June to July"
-#   starting in July:  "July - September", "July to August"
-#   within July:       "July 2-5", "Jul 1st - 31st", "July 1st-July 31st"
-_MONTHS = r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
-_SEP = r'(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)'
-_ORD = r'(?:st|nd|rd|th)?'
-_SHORT_TERM_SUBLET_RANGE_RE = re.compile(
-    rf'(?:'
-    rf'\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?)'
-    rf'.{{1,50}}?{_SEP}\s*\bjul(?:y)?\b'
-    rf'|'
-    rf'\bjul(?:y)?\b.{{0,20}}?{_SEP}\s*\b{_MONTHS}\b'
-    rf'|'
-    rf'\bjul(?:y)?\.?\s*\d{{1,2}}{_ORD}\s*[-–—]\s*(?:\bjul(?:y)?\.?\s*)?\d{{1,2}}{_ORD}\b'
-    rf')',
-    re.IGNORECASE,
-)
-_TAKEOVER_RE = re.compile(r'\b(?:(?:lease\s+)?takeover(?:\s+lease)?|re[-\s]?sign)\b', re.IGNORECASE)
+BED_CHOICES: list[str] = ["Studio", "1 bed", "2 bed", "3 bed", "4 bed", "5 bed"]
+BOROUGH_CHOICES: list[str] = list(BOROUGH_KEYWORDS.keys())
+
+# Active location keywords — replaced by configure_borough_filter()
+_ACTIVE_LOCATION_KEYWORDS: list[str] = [kw for kws in BOROUGH_KEYWORDS.values() for kw in kws]
+
+_WORD_TO_NUM: dict[str, str] = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+}
+
+# Set by configure_bedroom_filter(); None means no filter applied
+_ALLOW_STUDIO: bool = True
+_ALLOWED_BED_COUNTS: frozenset[str] | None = None
+
+_REQUIRE_PRIVATE_BATHROOM: bool = False
+
+
+def configure_bathroom_filter(require: bool) -> None:
+    global _REQUIRE_PRIVATE_BATHROOM
+    _REQUIRE_PRIVATE_BATHROOM = require
+
+
+def configure_move_in_months(months: list[str]) -> None:
+    """Build all month-dependent regexes from the user's selection."""
+    global _MOVE_IN_MONTH_RE, _DATE_EXTRACT_RE, _SHORT_TERM_SUBLET_RANGE_RE
+
+    broad_parts: list[str] = []
+    date_parts: list[str] = []
+
+    for month in months:
+        pat, num = _MONTH_DATA[month]
+        broad_parts += [rf'\b{pat}\.?\b', rf'{num}/\d{{1,2}}']
+        date_parts  += [rf'{num}/\d{{1,2}}', rf'{pat}\.?\s*\d{{1,2}}{_ORD}']
+
+    _MOVE_IN_MONTH_RE = re.compile('|'.join(broad_parts), re.IGNORECASE)
+    _DATE_EXTRACT_RE  = re.compile('|'.join(date_parts),  re.IGNORECASE)
+
+    range_alts: list[str] = []
+    for month in months:
+        pat, _ = _MONTH_DATA[month]
+        other = r'(?:' + '|'.join(p for m, (p, _) in _MONTH_DATA.items() if m != month) + r')'
+        range_alts += [
+            rf'\b{other}.{{1,50}}?{_SEP}\s*\b{pat}\b',
+            rf'\b{pat}\b.{{0,20}}?{_SEP}\s*\b{other}\b',
+            rf'\b{pat}\.?\s*\d{{1,2}}{_ORD}\s*[-–—]\s*(?:\b{pat}\.?\s*)?\d{{1,2}}{_ORD}\b',
+        ]
+
+    _SHORT_TERM_SUBLET_RANGE_RE = re.compile(
+        r'(?:' + '|'.join(range_alts) + r')',
+        re.IGNORECASE,
+    )
+
+
+def configure_borough_filter(
+    selected_boroughs: list[str],
+    selected_neighborhoods: list[str] | None = None,
+) -> None:
+    """Restrict location matching to selected boroughs, or specific neighborhoods within them."""
+    global _ACTIVE_LOCATION_KEYWORDS
+    if selected_neighborhoods:
+        active_boroughs = selected_boroughs or list(BOROUGH_KEYWORDS.keys())
+        kws: list[str] = []
+        for borough in active_boroughs:
+            nbhd_map = BOROUGH_NEIGHBORHOODS.get(borough, {})
+            for nbhd in selected_neighborhoods:
+                kws.extend(nbhd_map.get(nbhd, []))
+        _ACTIVE_LOCATION_KEYWORDS = kws
+    elif not selected_boroughs:
+        _ACTIVE_LOCATION_KEYWORDS = [kw for kws in BOROUGH_KEYWORDS.values() for kw in kws]
+    else:
+        _ACTIVE_LOCATION_KEYWORDS = [kw for b in selected_boroughs for kw in BOROUGH_KEYWORDS[b]]
+
+
+def configure_bedroom_filter(selected: list[str]) -> None:
+    """Set bedroom inclusion rules from the user's selection."""
+    global _ALLOW_STUDIO, _ALLOWED_BED_COUNTS
+    _ALLOW_STUDIO = "Studio" in selected
+    counts = {s.split()[0] for s in selected if s != "Studio"}
+    _ALLOWED_BED_COUNTS = frozenset(counts) if counts else None
 
 
 @dataclass
@@ -89,17 +172,29 @@ def evaluate(post: Post) -> bool:
     if any(kw in lower for kw in EXCLUDE_KEYWORDS):
         return False
 
+    if not _ALLOW_STUDIO and "studio" in lower:
+        return False
+
+    if _ALLOWED_BED_COUNTS is not None:
+        bed_m = _BEDS_RE.search(post.text)
+        if bed_m:
+            count = _WORD_TO_NUM.get(bed_m.group(1).lower(), bed_m.group(1))
+            if count not in _ALLOWED_BED_COUNTS:
+                return False
+
     # Drop short-term sublets (e.g. June - August) unless it's a lease takeover/re-sign
     if _SHORT_TERM_SUBLET_RANGE_RE.search(post.text) and not _TAKEOVER_RE.search(post.text):
         return False
 
     move_in_hits = _MOVE_IN_MONTH_RE.findall(post.text)
-    bathroom_hits = _any_match(post.text, BATHROOM_KEYWORDS)
-    location_hits = _any_match(post.text, LOCATION_KEYWORDS)
+    bathroom_hits = _any_match(post.text, PRIVATE_BATHROOM_KEYWORDS) if _REQUIRE_PRIVATE_BATHROOM else []
+    location_hits = _any_match(post.text, _ACTIVE_LOCATION_KEYWORDS)
 
     post.matched_terms = move_in_hits + bathroom_hits + location_hits
 
-    if not (move_in_hits and bathroom_hits and location_hits):
+    if not move_in_hits or not location_hits:
+        return False
+    if _REQUIRE_PRIVATE_BATHROOM and not bathroom_hits:
         return False
 
     post.move_in_date = _extract_move_in_date(post.text)
