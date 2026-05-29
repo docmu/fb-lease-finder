@@ -10,6 +10,7 @@ from collections import defaultdict
 from urllib.parse import urlparse
 
 from rich.console import Console
+from rich.markup import escape
 from rich.text import Text
 
 import questionary
@@ -45,7 +46,7 @@ async def main(group_urls: list[str]) -> None:
         by_group[post.source_group].append(post)
 
     for i, (group_url, group_posts) in enumerate(by_group.items(), 1):
-        console.print(f"[bold][purple]Group {i}: {group_url}[/purple][/bold]\n")
+        console.print(f"[bold][purple]Group {i}: {escape(group_url)}[/purple][/bold]\n")
 
         by_neighborhood: dict[str, list[Post]] = defaultdict(list)
         for post in group_posts:
@@ -54,9 +55,9 @@ async def main(group_urls: list[str]) -> None:
         for neighborhood, nbhd_posts in by_neighborhood.items():
             for post in nbhd_posts:
                 console.print(
-                    f"  [bold]Move-in:[/bold] [green]{post.move_in_date or '—'}[/green]"
-                    f"  [bold]·[/bold]  [bold]Neighborhood:[/bold] {post.neighborhood or '—'}"
-                    f"  [bold]·[/bold]  [bold]Beds/Baths:[/bold] {post.beds_baths or '—'}"
+                    f"  [bold]Move-in:[/bold] [green]{escape(post.move_in_date or '—')}[/green]"
+                    f"  [bold]·[/bold]  [bold]Neighborhood:[/bold] {escape(post.neighborhood or '—')}"
+                    f"  [bold]·[/bold]  [bold]Beds/Baths:[/bold] {escape(post.beds_baths or '—')}"
                 )
                 link = Text("  Link: ", style="bold")
                 link.append(post.url, style=f"blue underline link {post.url}")
@@ -130,6 +131,10 @@ def _prompt() -> list[str]:
                 console.print("[yellow]no urls entered, exiting.[/yellow]")
                 sys.exit(0)
             break
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or parsed.netloc not in ("www.facebook.com", "facebook.com"):
+            console.print("[red]please enter a valid facebook.com URL.[/red]")
+            continue
         group_urls.append(url)
 
     return group_urls

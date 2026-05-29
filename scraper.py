@@ -126,7 +126,7 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
 
 async def fetch_posts(group_urls: list[str]) -> list[Post]:
     """Launch browser with persistent session and scrape all groups."""
-    SESSION_DIR.mkdir(exist_ok=True)
+    SESSION_DIR.mkdir(mode=0o700, exist_ok=True)
 
     async with async_playwright() as pw:
         context = await pw.chromium.launch_persistent_context(
