@@ -8,7 +8,7 @@ from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBOR
 # Shared building blocks used inside dynamically compiled regexes below
 _SEP = r'(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)'  # date range separators: "–", "to", "through", "until"
 _ORD = r'(?:st|nd|rd|th)?'                          # optional ordinal suffix: "1st", "2nd", "3rd", "4th"
-_NUM = r'(?:\d+|one|two|three)'                     # digit or written-out number up to three
+_NUM = r'(?:\d+|one|two|three|four|five)'                     # digit or written-out number up to three
 
 # (abbreviated_pattern, numeric_string) for each month
 _MONTH_DATA: dict[str, tuple[str, str]] = {

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-fb-sublease-finder — scrape Facebook sublease groups and surface posts
-matching: August move-in + private bathroom + Brooklyn.
+fb-sublease-finder — scrape Facebook sublease groups and surface posts within the past 24 hours that match your criteria
 """
 
 import asyncio

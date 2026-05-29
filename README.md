@@ -1,6 +1,6 @@
 # fb-sublease-finder
 
-Automated workflow that searches NYC sublease Facebook groups and returns posts that match your criteria bc ain't nobody got time for that.
+Automated workflow that searches Facebook NYC sublease groups and returns posts that match your criteria bc ain't nobody got time for that.
 
 ---
 
