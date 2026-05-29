@@ -82,6 +82,9 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
                 url = await link_el.get_attribute("href") if link_el else group_url
                 if url and url.startswith("/"):
                     url = "https://www.facebook.com" + url
+                # Strip tracking params
+                if url:
+                    url = url.split("?")[0]
 
                 if url in seen_urls:
                     continue

@@ -10,9 +10,7 @@ from collections import defaultdict
 from urllib.parse import urlparse
 
 from rich.console import Console
-from rich.table import Table
 from rich.text import Text
-from rich import box
 
 import questionary
 
@@ -30,14 +28,8 @@ from filter import (
 console = Console()
 
 
-def _group_label(url: str) -> str:
-    """Extract the group slug or ID from a Facebook group URL."""
-    parts = urlparse(url).path.strip("/").split("/")
-    return parts[1] if len(parts) >= 2 else url
-
-
 async def main(group_urls: list[str]) -> None:
-    console.print(f"\n[bold]scanning {len(group_urls)} group(s)... this might take a moment, hang tight![/bold]\n")
+    console.print(f"\n[bold][green]scanning {len(group_urls)} group(s)... this might take a moment, hang tight![/green][/bold]\n")
     posts = await fetch_posts(group_urls)
     matches = [p for p in posts if evaluate(p)]
 
@@ -52,26 +44,24 @@ async def main(group_urls: list[str]) -> None:
     for post in matches:
         by_group[post.source_group].append(post)
 
-    for group_url, group_posts in by_group.items():
-        count = len(group_posts)
-        console.print(f"[dim]{group_url}[/dim]")
+    for i, (group_url, group_posts) in enumerate(by_group.items(), 1):
+        console.print(f"[bold][purple]Group {i}: {group_url}[/purple][/bold]\n")
 
-        table = Table(box=box.SIMPLE_HEAD, show_header=True, header_style="bold", padding=(0, 1))
-        table.add_column("Move-in", style="green", min_width=14)
-        table.add_column("Neighborhood", min_width=18)
-        table.add_column("Beds / Baths", min_width=14)
-        table.add_column("Link")
-
+        by_neighborhood: dict[str, list[Post]] = defaultdict(list)
         for post in group_posts:
-            link = Text("View post →", style=f"blue underline link {post.url}") 
-            table.add_row(
-                post.move_in_date or "—",
-                post.neighborhood or "—",
-                post.beds_baths or "—",
-                link,
-            )
+            by_neighborhood[post.neighborhood or "—"].append(post)
 
-        console.print(table)
+        for neighborhood, nbhd_posts in by_neighborhood.items():
+            for post in nbhd_posts:
+                console.print(
+                    f"  [bold]Move-in:[/bold] [green]{post.move_in_date or '—'}[/green]"
+                    f"  [bold]·[/bold]  [bold]Neighborhood:[/bold] {post.neighborhood or '—'}"
+                    f"  [bold]·[/bold]  [bold]Beds/Baths:[/bold] {post.beds_baths or '—'}"
+                )
+                link = Text("  Link: ", style="bold")
+                link.append(post.url, style=f"blue underline link {post.url}")
+                console.print(link)
+                console.print()
         console.print()
 
 
@@ -127,7 +117,7 @@ def _prompt() -> list[str]:
 
     configure_borough_filter(selected_boroughs or [], selected_neighborhoods)
 
-    console.print("paste the fb group URL that you want me to search (e.g. https://www.facebook.com/groups/1207463126375923)\n")
+    console.print("[bold]paste the fb group URL that you want me to search (e.g. https://www.facebook.com/groups/1207463126375923)[/bold]")
     group_urls: list[str] = []
     while True:
         url = questionary.text(
@@ -146,7 +136,7 @@ def _prompt() -> list[str]:
 
 
 if __name__ == "__main__":
-    console.print("[green]hiii i’m here to help you find your next nyc apartment! i just have a few questions before i get started :D[/green]\n")
+    console.print("[bold]hiii i’m here to help you find your next nyc apartment! i just have a few questions before i get started :D[/bold]\n")
 
     try:
         group_urls = _prompt()
