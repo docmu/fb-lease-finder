@@ -8,7 +8,7 @@ from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBOR
 # Shared building blocks used inside dynamically compiled regexes below
 _SEP = r'(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)'  # date range separators: "–", "to", "through", "until"
 _ORD = r'(?:st|nd|rd|th)?'                          # optional ordinal suffix: "1st", "2nd", "3rd", "4th"
-_NUM = r'(?:\d+|one|two|three)'                     # digit or written-out number up to three
+_NUM = r'(?:\d+|one|two|three|four|five)'                     # digit or written-out number up to three
 
 # (abbreviated_pattern, numeric_string) for each month
 _MONTH_DATA: dict[str, tuple[str, str]] = {
@@ -48,7 +48,7 @@ _TAKEOVER_RE = re.compile(
 # Captures the leading number/word from bedroom/bathroom counts
 # e.g. "2bed", "two bedrooms", "1 br", "3 bdrm"
 _BEDS_RE = re.compile(rf'({_NUM})\s*(?:bed(?:room)?s?|bdrm|br|bd)\b', re.IGNORECASE)
-_BATHS_RE = re.compile(rf'({_NUM})\s*(?:bath(?:room)?s?|ba|bth|br)\b', re.IGNORECASE)
+_BATHS_RE = re.compile(rf'({_NUM})\s*(?:bath(?:room)?s?|ba|bth)\b', re.IGNORECASE)
 
 BED_CHOICES: list[str] = ["Studio", "1 bed", "2 bed", "3 bed", "4 bed", "5 bed"]
 BOROUGH_CHOICES: list[str] = list(BOROUGH_KEYWORDS.keys())
@@ -89,12 +89,20 @@ def configure_move_in_months(months: list[str]) -> None:
 
     range_alts: list[str] = []
     for month in months:
-        pat, _ = _MONTH_DATA[month]
-        other = r'(?:' + '|'.join(p for m, (p, _) in _MONTH_DATA.items() if m != month) + r')'
+        pat, num = _MONTH_DATA[month]
+        other     = r'(?:' + '|'.join(p for m, (p, _) in _MONTH_DATA.items() if m != month) + r')'
+        other_num = r'(?:' + '|'.join(n for m, (_, n) in _MONTH_DATA.items() if m != month) + r')'
         range_alts += [
+            # cross-month text range ending in target: "June 1 – August 1", "June to August"
             rf'\b{other}.{{1,50}}?{_SEP}\s*\b{pat}\b',
+            # cross-month text range starting from target: "August – September"
             rf'\b{pat}\b.{{0,20}}?{_SEP}\s*\b{other}\b',
+            # within-month text range: "August 1st – August 31st", "August 1–31"
             rf'\b{pat}\.?\s*\d{{1,2}}{_ORD}\s*[-–—]\s*(?:\b{pat}\.?\s*)?\d{{1,2}}{_ORD}\b',
+            # numeric cross-month range ending in target: "6/10-8/1", "6/10/2026-8/1/2026"
+            rf'\b{other_num}/\d{{1,2}}(?:/\d{{2,4}})?\s*[-–—]\s*{num}/\d{{1,2}}(?:/\d{{2,4}})?\b',
+            # numeric cross-month range starting from target: "8/1-9/1", "8/1/26-9/1/26"
+            rf'\b{num}/\d{{1,2}}(?:/\d{{2,4}})?\s*[-–—]\s*{other_num}/\d{{1,2}}(?:/\d{{2,4}})?\b',
         ]
 
     _SHORT_TERM_SUBLET_RANGE_RE = re.compile(
@@ -165,9 +173,35 @@ def _extract_neighborhood(location_hits: list[str]) -> str:
     return max(location_hits, key=len).strip().title()
 
 
+def _closest_bed_bath(text: str) -> tuple[re.Match | None, re.Match | None]:
+    """Pick the bed/bath match pair closest together in the text.
+
+    Apartment specs ("3bd/2ba", "3 bed 2 bath") usually place bed and bath
+    counts adjacent, while availability lines ("One Bedroom in a 3bd/2ba…")
+    leave a large gap between the room count and any bath figure. Minimising
+    the gap selects the spec over the availability mention.
+    """
+    beds  = list(_BEDS_RE.finditer(text))
+    baths = list(_BATHS_RE.finditer(text))
+    if not beds and not baths:
+        return None, None
+    if not baths:
+        return beds[0], None
+    if not beds:
+        return None, baths[0]
+
+    best_bed, best_bath, best_dist = beds[0], baths[0], float("inf")
+    for bed_m in beds:
+        for bath_m in baths:
+            dist = abs(bed_m.start() - bath_m.start())
+            if dist < best_dist:
+                best_dist = dist
+                best_bed, best_bath = bed_m, bath_m
+    return best_bed, best_bath
+
+
 def _extract_beds_baths(text: str) -> str:
-    beds_m = _BEDS_RE.search(text)
-    baths_m = _BATHS_RE.search(text)
+    beds_m, baths_m = _closest_bed_bath(text)
     parts = []
     if beds_m:
         parts.append(f"{beds_m.group(1)} bed")
@@ -205,9 +239,8 @@ def evaluate(post: Post) -> bool:
         return False
 
     if _REQUIRE_PRIVATE_BATHROOM and not bathroom_hits:
-        # Fall back: assume the room has a private bathroom if total bathrooms >= total bedrooms
-        beds_m = _BEDS_RE.search(post.text)
-        baths_m = _BATHS_RE.search(post.text)
+        # Fallback: infer private bathroom from the apartment spec (baths >= beds)
+        beds_m, baths_m = _closest_bed_bath(post.text)
         if beds_m and baths_m:
             bed_n = _WORD_TO_NUM.get(beds_m.group(1).lower(), beds_m.group(1))
             bath_n = _WORD_TO_NUM.get(baths_m.group(1).lower(), baths_m.group(1))

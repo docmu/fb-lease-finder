@@ -1,6 +1,6 @@
 # fb-sublease-finder
 
-Searches Facebook NYC sublease groups and shows you posts that match your criteria bc finding an apartment is hard.
+Automated workflow that searches Facebook NYC sublease groups and returns posts that match your criteria bc ain't nobody got time for that.
 
 ---
 
@@ -54,7 +54,7 @@ A browser window may open and prompt you to log in to Facebook for authenticatio
 
 **Step 3 — See your results**
 
-The script returns matching posts from the LAST 24 HOURS. **Command+Click** "View post" to open the link in the browser.
+The script returns matching posts from the LAST 24 HOURS. **Command+Double Click** the link to open it in the browser.
 
 ---
 
