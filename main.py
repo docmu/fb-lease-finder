@@ -4,6 +4,7 @@ fb-sublease-finder — scrape Facebook sublease groups and surface posts within 
 """
 
 import asyncio
+import re
 import sys
 from collections import defaultdict
 from urllib.parse import urlparse
@@ -27,6 +28,24 @@ from filter import (
 
 console = Console()
 
+_MONTH_NUM: dict[str, int] = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _move_in_sort_key(post: Post) -> tuple[int, int]:
+    """Return (month, day) for sorting; unknowns sort last."""
+    d = (post.move_in_date or "").lower()
+    m = re.match(r'(\d{1,2})/(\d{1,2})', d)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    for prefix, num in _MONTH_NUM.items():
+        if d.startswith(prefix):
+            day = re.search(r'\d+', d[len(prefix):])
+            return num, (int(day.group()) if day and int(day.group()) <= 31 else 0)
+    return 99, 0
+
 
 async def main(group_urls: list[str]) -> None:
     console.print(f"\n[bold][green]scanning {len(group_urls)} group(s)... this might take a moment, hang tight![/green][/bold]\n")
@@ -47,21 +66,16 @@ async def main(group_urls: list[str]) -> None:
     for i, (group_url, group_posts) in enumerate(by_group.items(), 1):
         console.print(f"[bold][purple]Group {i}: {escape(group_url)}[/purple][/bold]\n")
 
-        by_neighborhood: dict[str, list[Post]] = defaultdict(list)
-        for post in group_posts:
-            by_neighborhood[post.neighborhood or "—"].append(post)
-
-        for neighborhood, nbhd_posts in by_neighborhood.items():
-            for post in nbhd_posts:
-                console.print(
-                    f"  [bold]Move-in:[/bold] [green]{escape(post.move_in_date or '—')}[/green]"
-                    f"  [bold]·[/bold]  [bold]Neighborhood:[/bold] {escape(post.neighborhood or '—')}"
-                    f"  [bold]·[/bold]  [bold]Beds/Baths:[/bold] {escape(post.beds_baths or '—')}"
-                )
-                link = Text("  Link: ", style="bold")
-                link.append(post.url, style=f"blue underline link {post.url}")
-                console.print(link)
-                console.print()
+        for post in sorted(group_posts, key=_move_in_sort_key):
+            console.print(
+                f"  [bold]Move-in:[/bold] [green]{escape(post.move_in_date or '—')}[/green]"
+                f"  [bold]·[/bold]  [bold]Neighborhood:[/bold] {escape(post.neighborhood or '—')}"
+                f"  [bold]·[/bold]  [bold]Beds/Baths:[/bold] {escape(post.beds_baths or '—')}"
+            )
+            link = Text("  Link: ", style="bold")
+            link.append(post.url, style=f"blue underline link {post.url}")
+            console.print(link)
+            console.print()
         console.print()
 
 
