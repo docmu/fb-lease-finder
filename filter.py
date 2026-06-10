@@ -121,6 +121,16 @@ def _extract_move_in_date(text: str) -> str:
 def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
     if not location_hits:
         return ""
+<<<<<<< HEAD
+=======
+    lower = text.lower()
+    # Pick the keyword that appears earliest — listing titles name the primary
+    # neighborhood first; secondary mentions ("walking distance to X") come later.
+    def first_pos(kw: str) -> int:
+        m = re.search(r'\b' + re.escape(kw.strip()) + r'\b', lower)
+        return m.start() if m else len(lower)
+    return min(location_hits, key=first_pos).strip().title()
+>>>>>>> 15beaed (fix: .5 bath & posted_at bug, add more neighborhoods, rename repro)
 
     # Pick the keyword that appears earliest — listing titles typically name the primary neighborhood first
     def first_pos(kw: str) -> int:
@@ -182,7 +192,12 @@ def evaluate(post: Post) -> bool:
     post.matched_terms = move_in_hits + bathroom_hits + location_hits
 
     post.move_in_date = _extract_move_in_date(post.text)
+<<<<<<< HEAD
     post.neighborhood = _extract_neighborhood(lower, location_hits)
     post.beds_baths = extract_beds_baths(post.text)
+=======
+    post.neighborhood = _extract_neighborhood(post.text, location_hits)
+    post.beds_baths = _extract_beds_baths(post.text)
+>>>>>>> 15beaed (fix: .5 bath & posted_at bug, add more neighborhoods, rename repro)
 
     return True
