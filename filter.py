@@ -47,8 +47,11 @@ _TAKEOVER_RE = re.compile(
 
 # Captures the leading number/word from bedroom/bathroom counts
 # e.g. "2bed", "two bedrooms", "1 br", "3 bdrm"
-_BEDS_RE = re.compile(rf'({_NUM})\s*(?:bed(?:room)?s?|bdrm|br|bd)\b', re.IGNORECASE)
-_BATHS_RE = re.compile(rf'({_NUM})\s*(?:bath(?:room)?s?|ba|bth)\b', re.IGNORECASE)
+# (?<!\d) prevents matching mid-number (e.g. "3" in "123 bed").                                        
+# (?:\.\d+)? consumes any decimal suffix so "1" in "1.5 bath" matches cleanly                          
+# and the integer part (floor) is captured — "1.5 bath" → 1, "2.5 bath" → 2.                           
+_BEDS_RE = re.compile(rf'(?<!\d)({_NUM})(?:\.\d+)?\s*(?:bed(?:room)?s?|bdrm|br|bd)\b', re.IGNORECASE)  
+_BATHS_RE = re.compile(rf'(?<!\d)({_NUM})(?:\.\d+)?\s*(?:bath(?:room)?s?|ba|bth)\b', re.IGNORECASE)
 
 BED_CHOICES: list[str] = ["Studio", "1 bed", "2 bed", "3 bed", "4 bed", "5 bed"]
 BOROUGH_CHOICES: list[str] = list(BOROUGH_KEYWORDS.keys())
@@ -134,6 +137,10 @@ def configure_borough_filter(
 def configure_bedroom_filter(selected: list[str]) -> None:
     """Set bedroom inclusion rules from the user's selection."""
     global _ALLOW_STUDIO, _ALLOWED_BED_COUNTS
+    if not selected:  # empty → no filter, allow everything
+        _ALLOW_STUDIO = True
+        _ALLOWED_BED_COUNTS = None
+        return
     _ALLOW_STUDIO = "Studio" in selected
     counts = {s.split()[0] for s in selected if s != "Studio"}
     _ALLOWED_BED_COUNTS = frozenset(counts) if counts else None
@@ -167,10 +174,16 @@ def _extract_move_in_date(text: str) -> str:
     return m2.group(0).strip() if m2 else ""
 
 
-def _extract_neighborhood(location_hits: list[str]) -> str:
+def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
     if not location_hits:
         return ""
-    return max(location_hits, key=len).strip().title()
+    lower = text.lower()
+    # Pick the keyword that appears earliest — listing titles name the primary
+    # neighborhood first; secondary mentions ("walking distance to X") come later.
+    def first_pos(kw: str) -> int:
+        m = re.search(r'\b' + re.escape(kw.strip()) + r'\b', lower)
+        return m.start() if m else len(lower)
+    return min(location_hits, key=first_pos).strip().title()
 
 
 def _closest_bed_bath(text: str) -> tuple[re.Match | None, re.Match | None]:
@@ -252,7 +265,7 @@ def evaluate(post: Post) -> bool:
     post.matched_terms = move_in_hits + bathroom_hits + location_hits
 
     post.move_in_date = _extract_move_in_date(post.text)
-    post.neighborhood = _extract_neighborhood(location_hits)
+    post.neighborhood = _extract_neighborhood(post.text, location_hits)
     post.beds_baths = _extract_beds_baths(post.text)
 
     return True

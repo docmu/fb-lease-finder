@@ -1,4 +1,4 @@
-# fb-sublease-finder
+# fb-lease-finder
 
 Automated workflow that searches Facebook NYC sublease groups and returns posts that match your criteria bc ain't nobody got time for that.
 
@@ -19,7 +19,7 @@ If you don't have it, download it from [python.org](https://www.python.org/downl
 ## First-time setup
 
 1. open your terminal  
-2. navigate to this folder (e.g. `cd Downloads/fb-sublease-finder/`)
+2. navigate to this folder (e.g. `cd Downloads/fb-lease-finder/`)
 3. run these commands in order: 
 
 ```bash
