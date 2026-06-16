@@ -122,13 +122,16 @@ def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
     if not location_hits:
         return ""
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     lower = text.lower()
+=======
+>>>>>>> d9ddfb6 (fix lowercase inconsistency)
     # Pick the keyword that appears earliest — listing titles name the primary
     # neighborhood first; secondary mentions ("walking distance to X") come later.
     def first_pos(kw: str) -> int:
-        m = re.search(r'\b' + re.escape(kw.strip()) + r'\b', lower)
-        return m.start() if m else len(lower)
+        m = re.search(r'\b' + re.escape(kw.strip()) + r'\b', text)
+        return m.start() if m else len(text)
     return min(location_hits, key=first_pos).strip().title()
 >>>>>>> 15beaed (fix: .5 bath & posted_at bug, add more neighborhoods, rename repro)
 
@@ -153,16 +156,26 @@ def evaluate(post: Post) -> bool:
     """Return True if post matches all criteria and contains no excluded terms."""
     lower = post.text.lower()
 
+<<<<<<< HEAD
     if EXCLUDE_RE.search(lower):
+=======
+    if any(re.search(rf"(?<!\w){re.escape(kw)}(?!\w)", lower) for kw in EXCLUDE_KEYWORDS):
+>>>>>>> d9ddfb6 (fix lowercase inconsistency)
         return False
 
     if not _ALLOW_STUDIO and "studio" in lower:
         return False
 
     if _ALLOWED_BED_COUNTS is not None:
+<<<<<<< HEAD
         bed_m, _ = closest_bed_bath(lower)
         if bed_m:
             count = WORD_TO_NUM.get(bed_m.group(1), bed_m.group(1))
+=======
+        bed_m = _BEDS_RE.search(lower)
+        if bed_m:
+            count = _WORD_TO_NUM.get(bed_m.group(1), bed_m.group(1))
+>>>>>>> d9ddfb6 (fix lowercase inconsistency)
             if count not in _ALLOWED_BED_COUNTS:
                 return False
 
@@ -180,10 +193,17 @@ def evaluate(post: Post) -> bool:
 
     if _REQUIRE_PRIVATE_BATHROOM and not bathroom_hits:
         # Fallback: infer private bathroom from the apartment spec (baths >= beds)
+<<<<<<< HEAD
         beds_m, baths_m = closest_bed_bath(lower)
         if beds_m and baths_m:
             bed_n = WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
             bath_n = WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
+=======
+        beds_m, baths_m = _closest_bed_bath(lower)
+        if beds_m and baths_m:
+            bed_n = _WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
+            bath_n = _WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
+>>>>>>> d9ddfb6 (fix lowercase inconsistency)
             if not bed_n.isdigit() or not bath_n.isdigit() or int(bath_n) < int(bed_n):
                 return False
         else:
@@ -193,10 +213,14 @@ def evaluate(post: Post) -> bool:
 
     post.move_in_date = _extract_move_in_date(post.text)
 <<<<<<< HEAD
+<<<<<<< HEAD
     post.neighborhood = _extract_neighborhood(lower, location_hits)
     post.beds_baths = extract_beds_baths(post.text)
 =======
     post.neighborhood = _extract_neighborhood(post.text, location_hits)
+=======
+    post.neighborhood = _extract_neighborhood(lower, location_hits)
+>>>>>>> d9ddfb6 (fix lowercase inconsistency)
     post.beds_baths = _extract_beds_baths(post.text)
 >>>>>>> 15beaed (fix: .5 bath & posted_at bug, add more neighborhoods, rename repro)
 
