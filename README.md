@@ -46,6 +46,8 @@ You only need to do this once.
 
 For each question, use the **arrow keys** to move, **Space** to select, and press **Enter** to submit.
 
+No selection defaults to selecting all options.
+
 For the URL question, paste one link at a time and press **Enter**. Press **Enter** on a blank line when you're done adding URLs.
 
 **Step 2 — Log in to Facebook**

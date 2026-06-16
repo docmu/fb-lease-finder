@@ -161,8 +161,10 @@ class Post:
 
 
 def _any_match(text: str, keywords: list[str]) -> list[str]:
-    lower = text.lower()
-    return [kw for kw in keywords if re.search(r'\b' + re.escape(kw.strip()) + r'\b', lower)]
+    return [
+        kw for kw in keywords
+        if re.search(rf"(?<!\w){re.escape(kw.strip())}(?!\w)", text)
+    ]
 
 
 def _extract_move_in_date(text: str) -> str:
@@ -177,12 +179,11 @@ def _extract_move_in_date(text: str) -> str:
 def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
     if not location_hits:
         return ""
-    lower = text.lower()
     # Pick the keyword that appears earliest — listing titles name the primary
     # neighborhood first; secondary mentions ("walking distance to X") come later.
     def first_pos(kw: str) -> int:
-        m = re.search(r'\b' + re.escape(kw.strip()) + r'\b', lower)
-        return m.start() if m else len(lower)
+        m = re.search(r'\b' + re.escape(kw.strip()) + r'\b', text)
+        return m.start() if m else len(text)
     return min(location_hits, key=first_pos).strip().title()
 
 
@@ -227,16 +228,16 @@ def evaluate(post: Post) -> bool:
     """Return True if post matches all criteria and contains no excluded terms."""
     lower = post.text.lower()
 
-    if any(kw in lower for kw in EXCLUDE_KEYWORDS):
+    if any(re.search(rf"(?<!\w){re.escape(kw)}(?!\w)", lower) for kw in EXCLUDE_KEYWORDS):
         return False
 
     if not _ALLOW_STUDIO and "studio" in lower:
         return False
 
     if _ALLOWED_BED_COUNTS is not None:
-        bed_m = _BEDS_RE.search(post.text)
+        bed_m = _BEDS_RE.search(lower)
         if bed_m:
-            count = _WORD_TO_NUM.get(bed_m.group(1).lower(), bed_m.group(1))
+            count = _WORD_TO_NUM.get(bed_m.group(1), bed_m.group(1))
             if count not in _ALLOWED_BED_COUNTS:
                 return False
 
@@ -245,18 +246,18 @@ def evaluate(post: Post) -> bool:
         return False
 
     move_in_hits = _MOVE_IN_MONTH_RE.findall(post.text)
-    location_hits = _any_match(post.text, _ACTIVE_LOCATION_KEYWORDS)
-    bathroom_hits = _any_match(post.text, PRIVATE_BATHROOM_KEYWORDS) if _REQUIRE_PRIVATE_BATHROOM else []
+    location_hits = _any_match(lower, _ACTIVE_LOCATION_KEYWORDS)
+    bathroom_hits = _any_match(lower, PRIVATE_BATHROOM_KEYWORDS) if _REQUIRE_PRIVATE_BATHROOM else []
 
     if not move_in_hits or not location_hits:
         return False
 
     if _REQUIRE_PRIVATE_BATHROOM and not bathroom_hits:
         # Fallback: infer private bathroom from the apartment spec (baths >= beds)
-        beds_m, baths_m = _closest_bed_bath(post.text)
+        beds_m, baths_m = _closest_bed_bath(lower)
         if beds_m and baths_m:
-            bed_n = _WORD_TO_NUM.get(beds_m.group(1).lower(), beds_m.group(1))
-            bath_n = _WORD_TO_NUM.get(baths_m.group(1).lower(), baths_m.group(1))
+            bed_n = _WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
+            bath_n = _WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
             if not bed_n.isdigit() or not bath_n.isdigit() or int(bath_n) < int(bed_n):
                 return False
         else:
@@ -265,7 +266,7 @@ def evaluate(post: Post) -> bool:
     post.matched_terms = move_in_hits + bathroom_hits + location_hits
 
     post.move_in_date = _extract_move_in_date(post.text)
-    post.neighborhood = _extract_neighborhood(post.text, location_hits)
+    post.neighborhood = _extract_neighborhood(lower, location_hits)
     post.beds_baths = _extract_beds_baths(post.text)
 
     return True
