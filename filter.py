@@ -123,15 +123,30 @@ def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
         return ""
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     lower = text.lower()
 =======
 >>>>>>> d9ddfb6 (fix lowercase inconsistency)
     # Pick the keyword that appears earliest — listing titles name the primary
     # neighborhood first; secondary mentions ("walking distance to X") come later.
+=======
+
+    # Pick the keyword that appears earliest — listing titles typically name the primary neighborhood first
+>>>>>>> 28f98a7 (harden filtering logic)
     def first_pos(kw: str) -> int:
-        m = re.search(r'\b' + re.escape(kw.strip()) + r'\b', text)
+        m = re.search(_kw_regex(kw), text)
         return m.start() if m else len(text)
+
+    # Prefer a specific neighborhood over a borough-level mention
+    nbhd_hits = [kw for kw in location_hits if kw in _NEIGHBORHOOD_KEYWORD_TO_NAME]
+    if nbhd_hits:
+        return _NEIGHBORHOOD_KEYWORD_TO_NAME[min(nbhd_hits, key=first_pos)]
+
+    borough_hits = [kw for kw in location_hits if kw in _BOROUGH_KEYWORD_TO_NAME]
+    if borough_hits:
+        return _BOROUGH_KEYWORD_TO_NAME[min(borough_hits, key=first_pos)]
+
     return min(location_hits, key=first_pos).strip().title()
 >>>>>>> 15beaed (fix: .5 bath & posted_at bug, add more neighborhoods, rename repro)
 
@@ -140,6 +155,7 @@ def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
         m = re.search(keyword_regex(kw), text)
         return m.start() if m else len(text)
 
+<<<<<<< HEAD
     # Prefer a specific neighborhood over a borough-level mention
     nbhd_hits = [kw for kw in location_hits if kw in NEIGHBORHOOD_KEYWORD_TO_NAME]
     if nbhd_hits:
@@ -150,6 +166,55 @@ def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
         return BOROUGH_KEYWORD_TO_NAME[min(borough_hits, key=first_pos)]
 
     return min(location_hits, key=first_pos).strip().title()
+=======
+def _bed_count_value(m: re.Match) -> int:
+    """Numeric bedroom count for a bed match (word numbers → int; else 0)."""
+    raw = _WORD_TO_NUM.get(m.group(1), m.group(1))
+    return int(raw) if raw.isdigit() else 0
+
+
+def _closest_bed_bath(text: str) -> tuple[re.Match | None, re.Match | None]:
+    """Pick the bed/bath match pair closest together in the text.
+
+    Apartment specs ("3bd/2ba", "3 bed 2 bath") usually place bed and bath
+    counts adjacent, while availability lines ("One Bedroom in a 3bd/2ba…")
+    leave a large gap between the room count and any bath figure. Minimising
+    the gap selects the spec over the availability mention.
+
+    With no bath to anchor on, fall back to the largest bed count so the unit
+    spec ("3 bedroom apartment") wins over an availability mention ("1 bedroom
+    available in a 3 bedroom apartment").
+    """
+    beds  = list(_BEDS_RE.finditer(text))
+    baths = list(_BATHS_RE.finditer(text))
+    if not beds and not baths:
+        return None, None
+    if not baths:
+        return max(beds, key=_bed_count_value), None
+    if not beds:
+        return None, baths[0]
+
+    best_bed, best_bath, best_dist = beds[0], baths[0], float("inf")
+    for bed_m in beds:
+        for bath_m in baths:
+            dist = abs(bed_m.start() - bath_m.start())
+            if dist < best_dist:
+                best_dist = dist
+                best_bed, best_bath = bed_m, bath_m
+    return best_bed, best_bath
+
+
+def _extract_beds_baths(text: str) -> str:
+    beds_m, baths_m = _closest_bed_bath(text)
+    parts = []
+    if beds_m:
+        beds = _WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
+        parts.append(f"{beds} bed")
+    if baths_m:
+        baths = _WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
+        parts.append(f"{baths} bath")
+    return " / ".join(parts)
+>>>>>>> 28f98a7 (harden filtering logic)
 
 
 def evaluate(post: Post) -> bool:
@@ -157,10 +222,14 @@ def evaluate(post: Post) -> bool:
     lower = post.text.lower()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     if EXCLUDE_RE.search(lower):
 =======
     if any(re.search(rf"(?<!\w){re.escape(kw)}(?!\w)", lower) for kw in EXCLUDE_KEYWORDS):
 >>>>>>> d9ddfb6 (fix lowercase inconsistency)
+=======
+    if _EXCLUDE_RE.search(lower):
+>>>>>>> 28f98a7 (harden filtering logic)
         return False
 
     if not _ALLOW_STUDIO and "studio" in lower:
@@ -168,11 +237,15 @@ def evaluate(post: Post) -> bool:
 
     if _ALLOWED_BED_COUNTS is not None:
 <<<<<<< HEAD
+<<<<<<< HEAD
         bed_m, _ = closest_bed_bath(lower)
         if bed_m:
             count = WORD_TO_NUM.get(bed_m.group(1), bed_m.group(1))
 =======
         bed_m = _BEDS_RE.search(lower)
+=======
+        bed_m, _ = _closest_bed_bath(lower)
+>>>>>>> 28f98a7 (harden filtering logic)
         if bed_m:
             count = _WORD_TO_NUM.get(bed_m.group(1), bed_m.group(1))
 >>>>>>> d9ddfb6 (fix lowercase inconsistency)
@@ -181,7 +254,11 @@ def evaluate(post: Post) -> bool:
 
     # TODO: maybe there is some value for short term sublets in the future
     # Drop short-term sublets unless listing mentions lease takeover/re-sign
+<<<<<<< HEAD
     if _SHORT_TERM_SUBLET_RANGE_RE.search(post.text) and not TAKEOVER_RE.search(post.text):
+=======
+    if _SHORT_TERM_SUBLET_RANGE_RE.search(post.text) and not _TAKEOVER_RE.search(post.text):
+>>>>>>> 28f98a7 (harden filtering logic)
         return False
 
     move_in_hits = _MOVE_IN_MONTH_RE.findall(post.text)
