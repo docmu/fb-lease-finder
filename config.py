@@ -154,13 +154,10 @@ BOROUGH_KEYWORDS: dict[str, list[str]] = {
 
 # Posts are excluded if they contain ANY of these terms (case-insensitive).
 EXCLUDE_KEYWORDS: list[str] = [
-    "short term",
-    "short-term",
+    "short term sublet",
+    "short-term sublet",
     "summer sublet",
-    "entire month",
-    "per day",
     "/day",
-    # explicitly no lease continuation — these contain "takeover"/"renew" but mean the opposite
     "no option to renew",
     "no option to take over",
     "no option to takeover",
