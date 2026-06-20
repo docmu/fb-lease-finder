@@ -43,11 +43,12 @@ WORD_TO_NUM: dict[str, str] = {
 # --- Bed / bath / takeover patterns -------------------------------------------
 
 # Captures the leading number/word from bedroom/bathroom counts
-# e.g. "2bed", "two bedrooms", "1 br", "3 bdrm"
+# e.g. "2bed", "two bedrooms", "1 br", "3 bdrm", "4-bedroom"
 # (?<!\d) prevents matching mid-number (e.g. "3" in "123 bed").
 # (?:\.\d+)? consumes any decimal suffix so "1" in "1.5 bath" matches cleanly and the integer part is captured — "1.5 bath" → 1, "2.5 bath" → 2.
-BEDS_RE = re.compile(rf'(?<!\d)({_NUM})(?:\.\d+)?\s*(?:bed(?:room)?s?|bdrm|br|bd)(?![a-z])', re.IGNORECASE)
-BATHS_RE = re.compile(rf'(?<!\d)({_NUM})(?:\.\d+)?\s*(?:bath(?:room)?s?|ba|bth)(?![a-z])', re.IGNORECASE)
+# [\s\u2013\u2014-]* allows a space, hyphen, or en/em dash between the count and the unit.
+BEDS_RE = re.compile(rf'(?<!\d)({_NUM})(?:\.\d+)?[\s\u2013\u2014-]*(?:bed(?:room)?s?|bdrm|br|bd)(?![a-z])', re.IGNORECASE)
+BATHS_RE = re.compile(rf'(?<!\d)({_NUM})(?:\.\d+)?[\s\u2013\u2014-]*(?:bath(?:room)?s?|ba|bth)(?![a-z])', re.IGNORECASE)
 
 # Matches lease continuation mentions — these override the short-term sublet filter
 # e.g. "lease takeover", "take over the lease", "re-sign", "lease renewal", "renewing my lease"
