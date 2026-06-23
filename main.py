@@ -48,7 +48,7 @@ def _move_in_sort_key(post: Post) -> tuple[int, int]:
 
 
 async def main(group_urls: list[str]) -> None:
-    console.print(f"\n[bold][green]scanning {len(group_urls)} group(s)... this might take a moment, hang tight![/green][/bold]\n")
+    console.print(f"\n[bold][green]scanning {len(group_urls)} group(s)... this might take a moment hang tight![/green][/bold]\n")
     posts = await fetch_posts(group_urls)
     matches = [p for p in posts if evaluate(p)]
 
@@ -89,9 +89,6 @@ def _prompt() -> list[str]:
         instruction=_INST,
     ).unsafe_ask()
 
-    if not selected_months:
-        console.print("[yellow]no months selected, exiting.[/yellow]")
-        sys.exit(0)
 
     configure_move_in_months(selected_months)
 
@@ -160,5 +157,5 @@ if __name__ == "__main__":
         group_urls = _prompt()
         asyncio.run(main(group_urls))
     except KeyboardInterrupt:
-        console.print("\n[red]program aborted bye![/red]")
+        console.print("\n[red]program aborted![/red]")
         sys.exit(0)

@@ -2,63 +2,41 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBORHOODS, EXCLUDE_KEYWORDS
 
-
-# Shared building blocks used inside dynamically compiled regexes below
-_SEP = r'(?:[-–—]|\bto\b|\bthrough\b|\buntil\b)'  # date range separators: "–", "to", "through", "until"
-_ORD = r'(?:st|nd|rd|th)?'                          # optional ordinal suffix: "1st", "2nd", "3rd", "4th"
-_NUM = r'(?:\d+|one|two|three|four|five)'                     # digit or written-out number up to three
-
-# (abbreviated_pattern, numeric_string) for each month
-_MONTH_DATA: dict[str, tuple[str, str]] = {
-    "January":   ("jan(?:uary)?",   "1"),
-    "February":  ("feb(?:ruary)?",  "2"),
-    "March":     ("mar(?:ch)?",     "3"),
-    "April":     ("apr(?:il)?",     "4"),
-    "May":       ("may",            "5"),
-    "June":      ("jun(?:e)?",      "6"),
-    "July":      ("jul(?:y)?",      "7"),
-    "August":    ("aug(?:ust)?",    "8"),
-    "September": ("sep(?:tember)?", "9"),
-    "October":   ("oct(?:ober)?",   "10"),
-    "November":  ("nov(?:ember)?",  "11"),
-    "December":  ("dec(?:ember)?",  "12"),
-}
-
-MONTH_NAMES: list[str] = list(_MONTH_DATA.keys())
-
-# Placeholders replaced by configure_move_in_months() before first use
-_MOVE_IN_MONTH_RE: re.Pattern = re.compile(r'(?!)')
-_DATE_EXTRACT_RE: re.Pattern = re.compile(r'(?!)')
-_SHORT_TERM_SUBLET_RANGE_RE: re.Pattern = re.compile(r'(?!)')
-
-# Matches lease continuation mentions — these override the short-term sublet filter
-# e.g. "lease takeover", "take over the lease", "re-sign", "lease renewal", "renewing my lease"
-_TAKEOVER_RE = re.compile(
-    r'\b(?:'
-    r'(?:lease\s+)?take[-\s]?over(?:\s+(?:the\s+)?lease)?'  # take over / lease takeover / take over the lease
-    r'|re[-\s]?sign'                                          # re-sign / resign
-    r'|lease\s+renew(?:al|ing)?'                             # lease renewal / lease renewing
-    r'|renew(?:al|ing)?\s+(?:the\s+|my\s+)?lease'           # renew lease / renewing my lease / renewal of the lease
-    r')\b',
-    re.IGNORECASE,
+from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBORHOODS
+from patterns import (
+    MONTH_NAMES,
+    WORD_TO_NUM,
+    EXCLUDE_RE,
+    TAKEOVER_RE,
+    NEIGHBORHOOD_KEYWORD_TO_NAME,
+    BOROUGH_KEYWORD_TO_NAME,
+    keyword_regex,
+    build_move_in_patterns,
+    closest_bed_bath,
+    extract_beds_baths,
 )
 
-# Captures the leading number/word from bedroom/bathroom counts
-# e.g. "2bed", "two bedrooms", "1 br", "3 bdrm"
-_BEDS_RE = re.compile(rf'({_NUM})\s*(?:bed(?:room)?s?|bdrm|br|bd)\b', re.IGNORECASE)
-_BATHS_RE = re.compile(rf'({_NUM})\s*(?:bath(?:room)?s?|ba|bth)\b', re.IGNORECASE)
+# Re-exported for callers (main.py) that import choices from this module.
+__all__ = [
+    "Post", "evaluate", "MONTH_NAMES", "BED_CHOICES", "BOROUGH_CHOICES",
+    "configure_move_in_months", "configure_bedroom_filter",
+    "configure_bathroom_filter", "configure_borough_filter",
+]
 
 BED_CHOICES: list[str] = ["Studio", "1 bed", "2 bed", "3 bed", "4 bed", "5 bed"]
 BOROUGH_CHOICES: list[str] = list(BOROUGH_KEYWORDS.keys())
 
+
+# --- Mutable filter state (set by the configure_* functions) ------------------
+
+# Move-in regexes — placeholders that never match until configure_move_in_months()
+_MOVE_IN_MONTH_RE: re.Pattern = re.compile(r'(?!)')
+_DATE_EXTRACT_RE: re.Pattern = re.compile(r'(?!)')
+_SHORT_TERM_SUBLET_RANGE_RE: re.Pattern = re.compile(r'(?!)')
+
 # Active location keywords — replaced by configure_borough_filter()
 _ACTIVE_LOCATION_KEYWORDS: list[str] = [kw for kws in BOROUGH_KEYWORDS.values() for kw in kws]
-
-_WORD_TO_NUM: dict[str, str] = {
-    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
-}
 
 # Set by configure_bedroom_filter(); None means no filter applied
 _ALLOW_STUDIO: bool = True
@@ -75,47 +53,17 @@ def configure_bathroom_filter(require: bool) -> None:
 def configure_move_in_months(months: list[str]) -> None:
     """Build all month-dependent regexes from the user's selection."""
     global _MOVE_IN_MONTH_RE, _DATE_EXTRACT_RE, _SHORT_TERM_SUBLET_RANGE_RE
-
-    broad_parts: list[str] = []
-    date_parts: list[str] = []
-
-    for month in months:
-        pat, num = _MONTH_DATA[month]
-        broad_parts += [rf'\b{pat}\.?\b', rf'{num}/\d{{1,2}}']
-        date_parts  += [rf'{num}/\d{{1,2}}', rf'{pat}\.?\s*\d{{1,2}}{_ORD}']
-
-    _MOVE_IN_MONTH_RE = re.compile('|'.join(broad_parts), re.IGNORECASE)
-    _DATE_EXTRACT_RE  = re.compile('|'.join(date_parts),  re.IGNORECASE)
-
-    range_alts: list[str] = []
-    for month in months:
-        pat, num = _MONTH_DATA[month]
-        other     = r'(?:' + '|'.join(p for m, (p, _) in _MONTH_DATA.items() if m != month) + r')'
-        other_num = r'(?:' + '|'.join(n for m, (_, n) in _MONTH_DATA.items() if m != month) + r')'
-        range_alts += [
-            # cross-month text range ending in target: "June 1 – August 1", "June to August"
-            rf'\b{other}.{{1,50}}?{_SEP}\s*\b{pat}\b',
-            # cross-month text range starting from target: "August – September"
-            rf'\b{pat}\b.{{0,20}}?{_SEP}\s*\b{other}\b',
-            # within-month text range: "August 1st – August 31st", "August 1–31"
-            rf'\b{pat}\.?\s*\d{{1,2}}{_ORD}\s*[-–—]\s*(?:\b{pat}\.?\s*)?\d{{1,2}}{_ORD}\b',
-            # numeric cross-month range ending in target: "6/10-8/1", "6/10/2026-8/1/2026"
-            rf'\b{other_num}/\d{{1,2}}(?:/\d{{2,4}})?\s*[-–—]\s*{num}/\d{{1,2}}(?:/\d{{2,4}})?\b',
-            # numeric cross-month range starting from target: "8/1-9/1", "8/1/26-9/1/26"
-            rf'\b{num}/\d{{1,2}}(?:/\d{{2,4}})?\s*[-–—]\s*{other_num}/\d{{1,2}}(?:/\d{{2,4}})?\b',
-        ]
-
-    _SHORT_TERM_SUBLET_RANGE_RE = re.compile(
-        r'(?:' + '|'.join(range_alts) + r')',
-        re.IGNORECASE,
-    )
+    _MOVE_IN_MONTH_RE, _DATE_EXTRACT_RE, _SHORT_TERM_SUBLET_RANGE_RE = build_move_in_patterns(months)
 
 
 def configure_borough_filter(
     selected_boroughs: list[str],
     selected_neighborhoods: list[str] | None = None,
 ) -> None:
-    """Restrict location matching to selected boroughs, or specific neighborhoods within them."""
+    """Restrict location matching to selected boroughs, or specific neighborhoods within them.
+
+    Extraction (`_extract_neighborhood`) classifies hits as neighborhood vs borough on the fly via the static keyword→name maps.
+    """
     global _ACTIVE_LOCATION_KEYWORDS
     if selected_neighborhoods:
         active_boroughs = selected_boroughs or list(BOROUGH_KEYWORDS.keys())
@@ -134,6 +82,10 @@ def configure_borough_filter(
 def configure_bedroom_filter(selected: list[str]) -> None:
     """Set bedroom inclusion rules from the user's selection."""
     global _ALLOW_STUDIO, _ALLOWED_BED_COUNTS
+    if not selected:  # empty → no filter, allow everything
+        _ALLOW_STUDIO = True
+        _ALLOWED_BED_COUNTS = None
+        return
     _ALLOW_STUDIO = "Studio" in selected
     counts = {s.split()[0] for s in selected if s != "Studio"}
     _ALLOWED_BED_COUNTS = frozenset(counts) if counts else None
@@ -154,8 +106,7 @@ class Post:
 
 
 def _any_match(text: str, keywords: list[str]) -> list[str]:
-    lower = text.lower()
-    return [kw for kw in keywords if re.search(r'\b' + re.escape(kw.strip()) + r'\b', lower)]
+    return [kw for kw in keywords if re.search(keyword_regex(kw), text)]
 
 
 def _extract_move_in_date(text: str) -> str:
@@ -167,83 +118,62 @@ def _extract_move_in_date(text: str) -> str:
     return m2.group(0).strip() if m2 else ""
 
 
-def _extract_neighborhood(location_hits: list[str]) -> str:
+def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
     if not location_hits:
         return ""
-    return max(location_hits, key=len).strip().title()
 
+    # Pick the keyword that appears earliest — listing titles typically name the primary neighborhood first
+    def first_pos(kw: str) -> int:
+        m = re.search(keyword_regex(kw), text)
+        return m.start() if m else len(text)
 
-def _closest_bed_bath(text: str) -> tuple[re.Match | None, re.Match | None]:
-    """Pick the bed/bath match pair closest together in the text.
+    # Prefer a specific neighborhood over a borough-level mention
+    nbhd_hits = [kw for kw in location_hits if kw in NEIGHBORHOOD_KEYWORD_TO_NAME]
+    if nbhd_hits:
+        return NEIGHBORHOOD_KEYWORD_TO_NAME[min(nbhd_hits, key=first_pos)]
 
-    Apartment specs ("3bd/2ba", "3 bed 2 bath") usually place bed and bath
-    counts adjacent, while availability lines ("One Bedroom in a 3bd/2ba…")
-    leave a large gap between the room count and any bath figure. Minimising
-    the gap selects the spec over the availability mention.
-    """
-    beds  = list(_BEDS_RE.finditer(text))
-    baths = list(_BATHS_RE.finditer(text))
-    if not beds and not baths:
-        return None, None
-    if not baths:
-        return beds[0], None
-    if not beds:
-        return None, baths[0]
+    borough_hits = [kw for kw in location_hits if kw in BOROUGH_KEYWORD_TO_NAME]
+    if borough_hits:
+        return BOROUGH_KEYWORD_TO_NAME[min(borough_hits, key=first_pos)]
 
-    best_bed, best_bath, best_dist = beds[0], baths[0], float("inf")
-    for bed_m in beds:
-        for bath_m in baths:
-            dist = abs(bed_m.start() - bath_m.start())
-            if dist < best_dist:
-                best_dist = dist
-                best_bed, best_bath = bed_m, bath_m
-    return best_bed, best_bath
-
-
-def _extract_beds_baths(text: str) -> str:
-    beds_m, baths_m = _closest_bed_bath(text)
-    parts = []
-    if beds_m:
-        parts.append(f"{beds_m.group(1)} bed")
-    if baths_m:
-        parts.append(f"{baths_m.group(1)} bath")
-    return " / ".join(parts)
+    return min(location_hits, key=first_pos).strip().title()
 
 
 def evaluate(post: Post) -> bool:
     """Return True if post matches all criteria and contains no excluded terms."""
     lower = post.text.lower()
 
-    if any(kw in lower for kw in EXCLUDE_KEYWORDS):
+    if EXCLUDE_RE.search(lower):
         return False
 
     if not _ALLOW_STUDIO and "studio" in lower:
         return False
 
     if _ALLOWED_BED_COUNTS is not None:
-        bed_m = _BEDS_RE.search(post.text)
+        bed_m, _ = closest_bed_bath(lower)
         if bed_m:
-            count = _WORD_TO_NUM.get(bed_m.group(1).lower(), bed_m.group(1))
+            count = WORD_TO_NUM.get(bed_m.group(1), bed_m.group(1))
             if count not in _ALLOWED_BED_COUNTS:
                 return False
 
-    # Drop short-term sublets (e.g. June - August) unless it's a lease takeover/re-sign
-    if _SHORT_TERM_SUBLET_RANGE_RE.search(post.text) and not _TAKEOVER_RE.search(post.text):
+    # TODO: maybe there is some value for short term sublets in the future
+    # Drop short-term sublets unless listing mentions lease takeover/re-sign
+    if _SHORT_TERM_SUBLET_RANGE_RE.search(post.text) and not TAKEOVER_RE.search(post.text):
         return False
 
     move_in_hits = _MOVE_IN_MONTH_RE.findall(post.text)
-    location_hits = _any_match(post.text, _ACTIVE_LOCATION_KEYWORDS)
-    bathroom_hits = _any_match(post.text, PRIVATE_BATHROOM_KEYWORDS) if _REQUIRE_PRIVATE_BATHROOM else []
+    location_hits = _any_match(lower, _ACTIVE_LOCATION_KEYWORDS)
+    bathroom_hits = _any_match(lower, PRIVATE_BATHROOM_KEYWORDS) if _REQUIRE_PRIVATE_BATHROOM else []
 
     if not move_in_hits or not location_hits:
         return False
 
     if _REQUIRE_PRIVATE_BATHROOM and not bathroom_hits:
         # Fallback: infer private bathroom from the apartment spec (baths >= beds)
-        beds_m, baths_m = _closest_bed_bath(post.text)
+        beds_m, baths_m = closest_bed_bath(lower)
         if beds_m and baths_m:
-            bed_n = _WORD_TO_NUM.get(beds_m.group(1).lower(), beds_m.group(1))
-            bath_n = _WORD_TO_NUM.get(baths_m.group(1).lower(), baths_m.group(1))
+            bed_n = WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
+            bath_n = WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
             if not bed_n.isdigit() or not bath_n.isdigit() or int(bath_n) < int(bed_n):
                 return False
         else:
@@ -252,7 +182,7 @@ def evaluate(post: Post) -> bool:
     post.matched_terms = move_in_hits + bathroom_hits + location_hits
 
     post.move_in_date = _extract_move_in_date(post.text)
-    post.neighborhood = _extract_neighborhood(location_hits)
-    post.beds_baths = _extract_beds_baths(post.text)
+    post.neighborhood = _extract_neighborhood(lower, location_hits)
+    post.beds_baths = extract_beds_baths(post.text)
 
     return True
