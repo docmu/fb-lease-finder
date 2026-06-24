@@ -1,6 +1,6 @@
 # fb-lease-finder
 
-Automated workflow that searches Facebook NYC sublease groups and returns posts that match your criteria bc ain't nobody got time for that.
+This python script automatically searches your Facebook NYC sublease groups and returns posts that match your criteria bc ain't nobody got time for that.
 
 ---
 

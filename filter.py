@@ -6,12 +6,14 @@ from dataclasses import dataclass, field
 from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBORHOODS
 from patterns import (
     MONTH_NAMES,
-    WORD_TO_NUM,
     EXCLUDE_RE,
     TAKEOVER_RE,
     NEIGHBORHOOD_KEYWORD_TO_NAME,
     BOROUGH_KEYWORD_TO_NAME,
+    ALL_LOCATION_KEYWORDS,
     keyword_regex,
+    location_name,
+    match_count,
     build_move_in_patterns,
     closest_bed_bath,
     extract_beds_baths,
@@ -62,7 +64,8 @@ def configure_borough_filter(
 ) -> None:
     """Restrict location matching to selected boroughs, or specific neighborhoods within them.
 
-    Extraction (`_extract_neighborhood`) classifies hits as neighborhood vs borough on the fly via the static keyword→name maps.
+    A post's primary location is resolved against ALL neighborhoods, then kept
+    only if it falls in this active set (see `evaluate`).
     """
     global _ACTIVE_LOCATION_KEYWORDS
     if selected_neighborhoods:
@@ -118,25 +121,28 @@ def _extract_move_in_date(text: str) -> str:
     return m2.group(0).strip() if m2 else ""
 
 
-def _extract_neighborhood(text: str, location_hits: list[str]) -> str:
-    if not location_hits:
-        return ""
+def _primary_location(text: str, location_hits: list[str]) -> str | None:
+    """The keyword for the post's primary location.
 
-    # Pick the keyword that appears earliest — listing titles typically name the primary neighborhood first
+    A post that names a neighborhood is naming its own, so prefer the earliest
+    neighborhood mention; fall back to a borough-level mention otherwise.
+    Returns `None` when the post names no location at all."""
+    if not location_hits:
+        return None
+
     def first_pos(kw: str) -> int:
         m = re.search(keyword_regex(kw), text)
         return m.start() if m else len(text)
 
-    # Prefer a specific neighborhood over a borough-level mention
     nbhd_hits = [kw for kw in location_hits if kw in NEIGHBORHOOD_KEYWORD_TO_NAME]
     if nbhd_hits:
-        return NEIGHBORHOOD_KEYWORD_TO_NAME[min(nbhd_hits, key=first_pos)]
+        return min(nbhd_hits, key=first_pos)
 
     borough_hits = [kw for kw in location_hits if kw in BOROUGH_KEYWORD_TO_NAME]
     if borough_hits:
-        return BOROUGH_KEYWORD_TO_NAME[min(borough_hits, key=first_pos)]
+        return min(borough_hits, key=first_pos)
 
-    return min(location_hits, key=first_pos).strip().title()
+    return min(location_hits, key=first_pos)
 
 
 def evaluate(post: Post) -> bool:
@@ -152,8 +158,7 @@ def evaluate(post: Post) -> bool:
     if _ALLOWED_BED_COUNTS is not None:
         bed_m, _ = closest_bed_bath(lower)
         if bed_m:
-            count = WORD_TO_NUM.get(bed_m.group(1), bed_m.group(1))
-            if count not in _ALLOWED_BED_COUNTS:
+            if match_count(bed_m) not in _ALLOWED_BED_COUNTS:
                 return False
 
     # TODO: maybe there is some value for short term sublets in the future
@@ -162,27 +167,34 @@ def evaluate(post: Post) -> bool:
         return False
 
     move_in_hits = _MOVE_IN_MONTH_RE.findall(post.text)
-    location_hits = _any_match(lower, _ACTIVE_LOCATION_KEYWORDS)
     bathroom_hits = _any_match(lower, PRIVATE_BATHROOM_KEYWORDS) if _REQUIRE_PRIVATE_BATHROOM else []
 
-    if not move_in_hits or not location_hits:
+    if not move_in_hits:
+        return False
+
+    # Determine the post's primary location across ALL neighborhoods, then keep
+    # it only if that location is one the user selected. This drops posts that
+    # merely mention a selected neighborhood in passing ("20 min to Williamsburg")
+    # while actually being located elsewhere.
+    primary_location = _primary_location(lower, _any_match(lower, ALL_LOCATION_KEYWORDS))
+    if primary_location is None or primary_location not in _ACTIVE_LOCATION_KEYWORDS:
         return False
 
     if _REQUIRE_PRIVATE_BATHROOM and not bathroom_hits:
         # Fallback: infer private bathroom from the apartment spec (baths >= beds)
         beds_m, baths_m = closest_bed_bath(lower)
         if beds_m and baths_m:
-            bed_n = WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
-            bath_n = WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
+            bed_n = match_count(beds_m)
+            bath_n = match_count(baths_m)
             if not bed_n.isdigit() or not bath_n.isdigit() or int(bath_n) < int(bed_n):
                 return False
         else:
             return False
 
-    post.matched_terms = move_in_hits + bathroom_hits + location_hits
+    post.matched_terms = move_in_hits + bathroom_hits + [primary_location]
 
     post.move_in_date = _extract_move_in_date(post.text)
-    post.neighborhood = _extract_neighborhood(lower, location_hits)
+    post.neighborhood = location_name(primary_location)
     post.beds_baths = extract_beds_baths(post.text)
 
     return True

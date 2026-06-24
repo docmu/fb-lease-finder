@@ -111,6 +111,23 @@ def keyword_regex(kw: str) -> str:
     return rf"(?<!\w){body}(?!\w)"
 
 
+# Every location keyword we know about (neighborhoods + borough catch-alls).
+# Used to find a post's *primary* location across all neighborhoods — even ones
+# the user didn't select — so we can drop posts whose main location is elsewhere.
+ALL_LOCATION_KEYWORDS: list[str] = (
+    list(NEIGHBORHOOD_KEYWORD_TO_NAME) + list(BOROUGH_KEYWORD_TO_NAME)
+)
+
+
+def location_name(kw: str) -> str:
+    """Canonical display name for a location keyword."""
+    return (
+        NEIGHBORHOOD_KEYWORD_TO_NAME.get(kw)
+        or BOROUGH_KEYWORD_TO_NAME.get(kw)
+        or kw.strip().title()
+    )
+
+
 def _exclude_pattern(kw: str) -> str:
     """Build a tolerant pattern for an exclude phrase.
 
@@ -183,9 +200,14 @@ def build_move_in_patterns(
 
 # --- Bed / bath extraction ----------------------------------------------------
 
+def match_count(m: re.Match) -> str:
+    """Normalize a bed/bath match's captured count to a digit string ("two" → "2", "3" → "3")."""
+    return WORD_TO_NUM.get(m.group(1), m.group(1))
+
+
 def _bed_count_value(m: re.Match) -> int:
     """Numeric bedroom count for a bed match (word numbers → int; else 0)."""
-    raw = WORD_TO_NUM.get(m.group(1), m.group(1))
+    raw = match_count(m)
     return int(raw) if raw.isdigit() else 0
 
 
@@ -224,9 +246,7 @@ def extract_beds_baths(text: str) -> str:
     beds_m, baths_m = closest_bed_bath(text)
     parts = []
     if beds_m:
-        beds = WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
-        parts.append(f"{beds} bed")
+        parts.append(f"{match_count(beds_m)} bed")
     if baths_m:
-        baths = WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
-        parts.append(f"{baths} bath")
+        parts.append(f"{match_count(baths_m)} bath")
     return " / ".join(parts)

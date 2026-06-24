@@ -16,6 +16,7 @@ from rich.text import Text
 import questionary
 
 from config import BOROUGH_NEIGHBORHOODS
+from tui import multicolumn_checkbox
 from scraper import fetch_posts
 from filter import (
     Post, evaluate,
@@ -114,19 +115,29 @@ def _prompt() -> list[str]:
     selected_neighborhoods: list[str] = []
     if questionary.confirm("do you have specific neighborhood(s) in mind?", default=False).unsafe_ask():
         active_boroughs = selected_boroughs or BOROUGH_CHOICES
-        neighborhood_choices: list = []
-        for borough in active_boroughs:
-            names = list(BOROUGH_NEIGHBORHOODS.get(borough, {}).keys())
-            if names:
+        grouped = [
+            (borough, list(BOROUGH_NEIGHBORHOODS.get(borough, {}).keys()))
+            for borough in active_boroughs
+            if BOROUGH_NEIGHBORHOODS.get(borough)
+        ]
+        try:
+            selected_neighborhoods = multicolumn_checkbox("select neighborhoods:", grouped, columns=2) or []
+        except KeyboardInterrupt:
+            raise
+        except Exception:
+            # Fall back to the standard single-column checkbox if the custom
+            # multi-column widget can't run (e.g. non-interactive terminal).
+            neighborhood_choices: list = []
+            for borough, names in grouped:
                 neighborhood_choices.append(questionary.Separator(f"\n── {borough} ──"))
                 neighborhood_choices.extend(names)
-        selected_neighborhoods = questionary.checkbox(
-            "select neighborhoods:",
-            choices=neighborhood_choices,
-            instruction=_INST,
-        ).unsafe_ask() or []
-
-    configure_borough_filter(selected_boroughs or [], selected_neighborhoods)
+            selected_neighborhoods = questionary.checkbox(
+                "select neighborhoods:",
+                choices=neighborhood_choices,
+                instruction=_INST,
+            ).unsafe_ask() or []
+            
+    configure_borough_filter(selected_boroughs or BOROUGH_CHOICES, selected_neighborhoods)
 
     console.print("[bold]paste the fb group URL that you want me to search (e.g. https://www.facebook.com/groups/1207463126375923)[/bold]")
     group_urls: list[str] = []
