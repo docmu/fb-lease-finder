@@ -200,9 +200,14 @@ def build_move_in_patterns(
 
 # --- Bed / bath extraction ----------------------------------------------------
 
+def match_count(m: re.Match) -> str:
+    """Normalize a bed/bath match's captured count to a digit string ("two" → "2", "3" → "3")."""
+    return WORD_TO_NUM.get(m.group(1), m.group(1))
+
+
 def _bed_count_value(m: re.Match) -> int:
     """Numeric bedroom count for a bed match (word numbers → int; else 0)."""
-    raw = WORD_TO_NUM.get(m.group(1), m.group(1))
+    raw = match_count(m)
     return int(raw) if raw.isdigit() else 0
 
 
@@ -241,9 +246,7 @@ def extract_beds_baths(text: str) -> str:
     beds_m, baths_m = closest_bed_bath(text)
     parts = []
     if beds_m:
-        beds = WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
-        parts.append(f"{beds} bed")
+        parts.append(f"{match_count(beds_m)} bed")
     if baths_m:
-        baths = WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
-        parts.append(f"{baths} bath")
+        parts.append(f"{match_count(baths_m)} bath")
     return " / ".join(parts)

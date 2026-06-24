@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBORHOODS
 from patterns import (
     MONTH_NAMES,
-    WORD_TO_NUM,
     EXCLUDE_RE,
     TAKEOVER_RE,
     NEIGHBORHOOD_KEYWORD_TO_NAME,
@@ -14,6 +13,7 @@ from patterns import (
     ALL_LOCATION_KEYWORDS,
     keyword_regex,
     location_name,
+    match_count,
     build_move_in_patterns,
     closest_bed_bath,
     extract_beds_baths,
@@ -124,9 +124,9 @@ def _extract_move_in_date(text: str) -> str:
 def _primary_location(text: str, location_hits: list[str]) -> str | None:
     """The keyword for the post's primary location.
 
-    Listings name their location early, so we take the earliest mention,
-    preferring a specific neighborhood over a borough-level catch-all. Returns
-    `None` when the post names no location at all."""
+    A post that names a neighborhood is naming its own, so prefer the earliest
+    neighborhood mention; fall back to a borough-level mention otherwise.
+    Returns `None` when the post names no location at all."""
     if not location_hits:
         return None
 
@@ -134,7 +134,6 @@ def _primary_location(text: str, location_hits: list[str]) -> str | None:
         m = re.search(keyword_regex(kw), text)
         return m.start() if m else len(text)
 
-    # Prefer a specific neighborhood over a borough-level mention
     nbhd_hits = [kw for kw in location_hits if kw in NEIGHBORHOOD_KEYWORD_TO_NAME]
     if nbhd_hits:
         return min(nbhd_hits, key=first_pos)
@@ -159,8 +158,7 @@ def evaluate(post: Post) -> bool:
     if _ALLOWED_BED_COUNTS is not None:
         bed_m, _ = closest_bed_bath(lower)
         if bed_m:
-            count = WORD_TO_NUM.get(bed_m.group(1), bed_m.group(1))
-            if count not in _ALLOWED_BED_COUNTS:
+            if match_count(bed_m) not in _ALLOWED_BED_COUNTS:
                 return False
 
     # TODO: maybe there is some value for short term sublets in the future
@@ -186,8 +184,8 @@ def evaluate(post: Post) -> bool:
         # Fallback: infer private bathroom from the apartment spec (baths >= beds)
         beds_m, baths_m = closest_bed_bath(lower)
         if beds_m and baths_m:
-            bed_n = WORD_TO_NUM.get(beds_m.group(1), beds_m.group(1))
-            bath_n = WORD_TO_NUM.get(baths_m.group(1), baths_m.group(1))
+            bed_n = match_count(beds_m)
+            bath_n = match_count(baths_m)
             if not bed_n.isdigit() or not bath_n.isdigit() or int(bath_n) < int(bed_n):
                 return False
         else:
