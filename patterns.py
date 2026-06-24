@@ -111,6 +111,23 @@ def keyword_regex(kw: str) -> str:
     return rf"(?<!\w){body}(?!\w)"
 
 
+# Every location keyword we know about (neighborhoods + borough catch-alls).
+# Used to find a post's *primary* location across all neighborhoods — even ones
+# the user didn't select — so we can drop posts whose main location is elsewhere.
+ALL_LOCATION_KEYWORDS: list[str] = (
+    list(NEIGHBORHOOD_KEYWORD_TO_NAME) + list(BOROUGH_KEYWORD_TO_NAME)
+)
+
+
+def location_name(kw: str) -> str:
+    """Canonical display name for a location keyword."""
+    return (
+        NEIGHBORHOOD_KEYWORD_TO_NAME.get(kw)
+        or BOROUGH_KEYWORD_TO_NAME.get(kw)
+        or kw.strip().title()
+    )
+
+
 def _exclude_pattern(kw: str) -> str:
     """Build a tolerant pattern for an exclude phrase.
 
