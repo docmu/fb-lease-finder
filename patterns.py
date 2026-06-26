@@ -35,6 +35,12 @@ _MONTH_DATA: dict[str, tuple[str, str]] = {
 
 MONTH_NAMES: list[str] = list(_MONTH_DATA.keys())
 
+# 3-letter month prefix → month number 
+# used for sorting move-in dates like "july 1st" / "jul"
+MONTH_PREFIX_TO_NUM: dict[str, int] = {
+    name[:3].lower(): int(num) for name, (_, num) in _MONTH_DATA.items()
+}
+
 WORD_TO_NUM: dict[str, str] = {
     "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
 }
@@ -44,9 +50,8 @@ WORD_TO_NUM: dict[str, str] = {
 
 # Captures the leading number/word from bedroom/bathroom counts
 # e.g. "2bed", "two bedrooms", "1 br", "3 bdrm", "4-bedroom"
-# (?<!\d) prevents matching mid-number (e.g. "3" in "123 bed").
-# (?:\.\d+)? consumes any decimal suffix so "1" in "1.5 bath" matches cleanly and the integer part is captured — "1.5 bath" → 1, "2.5 bath" → 2.
-# [\s\u2013\u2014-]* allows a space, hyphen, or en/em dash between the count and the unit.
+# (?<!\d) avoids matching mid-number ("3" in "123 bed"); (?:\.\d+)? drops a
+# decimal so "1.5 bath" → 1; [\s\u2013\u2014-]* allows a space/hyphen/dash before the unit.
 BEDS_RE = re.compile(rf'(?<!\d)({_NUM})(?:\.\d+)?[\s\u2013\u2014-]*(?:bed(?:room)?s?|bdrm|br|bd)(?![a-z])', re.IGNORECASE)
 BATHS_RE = re.compile(rf'(?<!\d)({_NUM})(?:\.\d+)?[\s\u2013\u2014-]*(?:bath(?:room)?s?|ba|bth)(?![a-z])', re.IGNORECASE)
 
@@ -90,7 +95,7 @@ _SEPARATOR = rf"[\s{_DASHES}]+"
 _APOS = "['\u2019]"
 
 
-def _tolerant_body(kw: str) -> str:
+def _keyword_regex_body(kw: str) -> str:
     """Escape `kw` into a regex body whose internal separators (spaces, hyphens,
     en/em dashes, line wraps) and apostrophes match common typographic variants.
 
@@ -105,7 +110,7 @@ def keyword_regex(kw: str) -> str:
     Keeps `(?<!\\w)…(?!\\w)` boundaries (keywords always start/end alnum) while
     tolerating dash/apostrophe/whitespace variants in multi-word neighborhoods
     ("bed-stuy" ↔ "bed–stuy", "hell's kitchen" ↔ "hell’s kitchen")."""
-    body = _tolerant_body(kw)
+    body = _keyword_regex_body(kw)
     if not body:
         return r"(?!)"  # never matches; defensive against a blank keyword
     return rf"(?<!\w){body}(?!\w)"
@@ -131,15 +136,12 @@ def location_name(kw: str) -> str:
 def _exclude_pattern(kw: str) -> str:
     """Build a tolerant pattern for an exclude phrase.
 
-    Internal whitespace/hyphens (incl. en/em dashes) match interchangeably and
-    across line wraps (`short term` ↔ `short-term` ↔ `short–term` ↔
-    `short\\nterm`). Straight and curly apostrophes are treated as equivalent
-    (`can't` ↔ `can’t`). Word boundaries are only applied at edges that are
-    actually word characters, so punctuation-leading tokens like `/day` still
-    match when glued to a number ("$50/day").
+    Shares `_keyword_regex_body`'s whitespace/dash/apostrophe tolerance, but applies
+    word boundaries only at alphanumeric edges so punctuation-leading tokens
+    like `/day` still match when glued to a number ("$50/day").
     """
     kw = kw.strip()
-    body = _tolerant_body(kw)
+    body = _keyword_regex_body(kw)
     if not body:
         raise ValueError("EXCLUDE_KEYWORDS contains a blank entry")
     lead = r"(?<!\w)" if kw[:1].isalnum() else ""

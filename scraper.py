@@ -5,8 +5,8 @@ import time as _time
 from pathlib import Path
 from playwright.async_api import async_playwright, BrowserContext, Page
 
-from config import SESSION_PATH, MAX_POSTS_PER_GROUP, _SECONDS_24H
-from filter import Post
+from config import SESSION_PATH, MAX_POSTS_PER_GROUP, SECONDS_24H
+from models import Post
 
 
 SESSION_DIR = Path(SESSION_PATH)
@@ -61,7 +61,7 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
     """Navigate to a group (sorted by newest) and collect posts from the past 24 hours."""
     posts: list[Post] = []
     seen_urls: set[str] = set()
-    cutoff = int(_time.time()) - _SECONDS_24H
+    cutoff = int(_time.time()) - SECONDS_24H
 
     sorted_url = _with_chronological_sort(group_url)
     await page.goto(sorted_url, wait_until="domcontentloaded")
