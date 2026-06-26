@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 
 from config import PRIVATE_BATHROOM_KEYWORDS, BOROUGH_KEYWORDS, BOROUGH_NEIGHBORHOODS
+from models import Post
 from patterns import (
     MONTH_NAMES,
     EXCLUDE_RE,
@@ -21,7 +21,7 @@ from patterns import (
 
 # Re-exported for callers (main.py) that import choices from this module.
 __all__ = [
-    "Post", "evaluate", "MONTH_NAMES", "BED_CHOICES", "BOROUGH_CHOICES",
+    "evaluate", "MONTH_NAMES", "BED_CHOICES", "BOROUGH_CHOICES",
     "configure_move_in_months", "configure_bedroom_filter",
     "configure_bathroom_filter", "configure_borough_filter",
 ]
@@ -92,20 +92,6 @@ def configure_bedroom_filter(selected: list[str]) -> None:
     _ALLOW_STUDIO = "Studio" in selected
     counts = {s.split()[0] for s in selected if s != "Studio"}
     _ALLOWED_BED_COUNTS = frozenset(counts) if counts else None
-
-
-@dataclass
-class Post:
-    text: str
-    url: str
-    timestamp: str
-    source_group: str = ""
-    posted_at: int = 0  # Unix timestamp from data-utime; 0 means unknown
-    matched_terms: list[str] = field(default_factory=list)
-    # Structured display fields populated by evaluate()
-    move_in_date: str = ""
-    neighborhood: str = ""
-    beds_baths: str = ""
 
 
 def _any_match(text: str, keywords: list[str]) -> list[str]:

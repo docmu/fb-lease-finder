@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fb-sublease-finder — scrape Facebook sublease groups and surface posts within the past 24 hours that match your criteria
+fb-lease-finder — scrape Facebook sublease groups and surface posts within the past 24 hours that match your criteria
 """
 
 import asyncio
@@ -16,10 +16,12 @@ from rich.text import Text
 import questionary
 
 from config import BOROUGH_NEIGHBORHOODS
+from models import Post
+from patterns import MONTH_PREFIX_TO_NUM
 from tui import multicolumn_checkbox
 from scraper import fetch_posts
 from filter import (
-    Post, evaluate,
+    evaluate,
     configure_move_in_months, MONTH_NAMES,
     configure_bedroom_filter, BED_CHOICES,
     configure_bathroom_filter,
@@ -29,11 +31,6 @@ from filter import (
 
 console = Console()
 
-_MONTH_NUM: dict[str, int] = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-}
-
 
 def _move_in_sort_key(post: Post) -> tuple[int, int]:
     """Return (month, day) for sorting; unknowns sort last."""
@@ -41,7 +38,7 @@ def _move_in_sort_key(post: Post) -> tuple[int, int]:
     m = re.match(r'(\d{1,2})/(\d{1,2})', d)
     if m:
         return int(m.group(1)), int(m.group(2))
-    for prefix, num in _MONTH_NUM.items():
+    for prefix, num in MONTH_PREFIX_TO_NUM.items():
         if d.startswith(prefix):
             day = re.search(r'\d+', d[len(prefix):])
             return num, (int(day.group()) if day and int(day.group()) <= 31 else 0)

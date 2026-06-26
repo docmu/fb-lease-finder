@@ -175,7 +175,7 @@ EXCLUDE_KEYWORDS: list[str] = [
 MAX_POSTS_PER_GROUP: int = 200
 
 # Cutoff time for posts to collect
-_SECONDS_24H: int = 86_400
+SECONDS_24H: int = 86_400
 
 # Browser session storage path (keeps you logged in between runs)
 SESSION_PATH: str = "session"
