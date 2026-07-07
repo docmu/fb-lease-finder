@@ -13,19 +13,33 @@ SESSION_DIR = Path(SESSION_PATH)
 
 
 def _parse_relative_time(label: str, now: int) -> int:
-    """Parse Facebook timestamp aria-label to Unix seconds.
+    """Parse a Facebook timestamp label to Unix seconds.
 
-    Facebook uses short relative labels ("48m", "5h") for posts within ~24h
-    and switches to absolute dates ("June 1 at 3:45 PM") for older posts.
+    Facebook uses short relative labels for roughly the first week ("48m",
+    "5h", "1d", "6d") and switches to absolute dates ("June 1 at 3:45 PM") once
+    a post is 7 days or older.
     Returns 0 for absolute dates or unrecognised formats — treated as past cutoff.
     """
     label = label.strip()
-    m = re.match(r'^(\d+)h$', label, re.IGNORECASE)
+    if not label:
+        return 0
+
+    low = label.lower()
+    if low in ("just now", "now"):
+        return now
+
+    m = re.match(r'^(\d+)\s*s(ec(onds?)?)?$', low)
     if m:
-        return now - int(m.group(1)) * 3600
-    m = re.match(r'^(\d+)m$', label, re.IGNORECASE)
+        return now - int(m.group(1))
+    m = re.match(r'^(\d+)\s*m(in(ute)?s?)?$', low)
     if m:
         return now - int(m.group(1)) * 60
+    m = re.match(r'^(\d+)\s*h(rs?|ours?)?$', low)
+    if m:
+        return now - int(m.group(1)) * 3600
+    m = re.match(r'^(\d+)\s*d(ays?)?$', low)
+    if m:
+        return now - int(m.group(1)) * 86_400
     return 0  # absolute date or unrecognised → treat as older than cutoff
 
 
@@ -63,6 +77,13 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
     seen_urls: set[str] = set()
     cutoff = int(_time.time()) - SECONDS_24H
 
+    # A single old post (e.g. a pinned announcement at the top of a
+    # chronological feed) shouldn't abort the scrape. Only stop once we've seen
+    # a run of consecutive confirmed-old posts, which reliably means we've
+    # scrolled past the 24h window.
+    consecutive_old = 0
+    OLD_RUN_LIMIT = 5
+
     sorted_url = _with_chronological_sort(group_url)
     await page.goto(sorted_url, wait_until="domcontentloaded")
 
@@ -70,7 +91,6 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
         await page.wait_for_timeout(2_000)
 
         articles = await page.query_selector_all('div[role="article"]')
-        hit_old_post = False
 
         for article in articles:
             if len(posts) >= MAX_POSTS_PER_GROUP:
@@ -108,22 +128,32 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
                     continue
                 seen_urls.add(url)
 
-                # Timestamp — read aria-label from the post's timestamp link ("48m", "5h")
-                time_el = await article.query_selector('a[href*="/posts/"][aria-label]')
+                # Timestamp — the post's permalink also carries the time label.
+                # Groups render permalinks in different formats (/posts/,
+                # /permalink/, ?story_fbid=), so accept all three, and read the
+                # relative label from either the link text ("5h") or aria-label.
+                time_el = await article.query_selector(
+                    'a[href*="/posts/"], a[href*="/permalink/"], a[href*="?story_fbid="]'
+                )
                 posted_at = 0 # default: absolute date format (e.g. "June 1", greater than 24h)
                 timestamp = ""
                 if time_el:
-                    label = await time_el.get_attribute("aria-label") or ""
-                    timestamp = label
-                    posted_at = _parse_relative_time(label, int(_time.time()))
+                    text_label = (await time_el.inner_text() or "").strip()
+                    aria_label = (await time_el.get_attribute("aria-label") or "").strip()
+                    for candidate in (text_label, aria_label):
+                        posted_at = _parse_relative_time(candidate, now)
+                        if posted_at:
+                            timestamp = candidate
+                            break
 
                 if not posted_at:
                     if time_el:           # element found but absolute date → confirmed old
-                        hit_old_post = True
+                        consecutive_old += 1
                     continue              # no element (pinned/ad) → skip silently
-                if posted_at < cutoff:
-                    hit_old_post = True
+                if posted_at <= cutoff:   # "past 24 h" = strictly younger than 24h
+                    consecutive_old += 1
                     continue
+                consecutive_old = 0       # a fresh post resets the run
 
                 posts.append(Post(
                     text=text,
@@ -135,7 +165,7 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
             except Exception:
                 continue
 
-        if len(posts) >= MAX_POSTS_PER_GROUP or hit_old_post:
+        if len(posts) >= MAX_POSTS_PER_GROUP or consecutive_old >= OLD_RUN_LIMIT:
             break
 
         await page.evaluate("window.scrollBy(0, 2000)")
