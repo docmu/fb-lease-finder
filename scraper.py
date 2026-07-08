@@ -75,7 +75,9 @@ async def _scrape_group(page: Page, group_url: str) -> list[Post]:
     """Navigate to a group (sorted by newest) and collect posts from the past 24 hours."""
     posts: list[Post] = []
     seen_urls: set[str] = set()
-    cutoff = int(_time.time()) - SECONDS_24H
+
+    now = int(_time.time())
+    cutoff = now - SECONDS_24H
 
     # A single old post (e.g. a pinned announcement at the top of a
     # chronological feed) shouldn't abort the scrape. Only stop once we've seen
